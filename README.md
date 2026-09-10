@@ -17,4 +17,9 @@ Author: BionicCode
 <br>
 <!-- doc-metadata-presentation:end -->
 
-# template-visual-studio-repository
+# Windows Terminal Launcher
+
+## Description
+
+A small extensible launcher that allows to launch custom scripts or executable from the Windows Explorer address bar.
+
