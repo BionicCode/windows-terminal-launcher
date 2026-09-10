@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/doc-metadata-manifest.schema.json",
+  "title": "Document metadata manifest",
+  "description": "Repository-local manifest that defines governed document files, metadata fields, presentation, and eligibility policy.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "version",
+    "defaults",
+    "include",
+    "exclude"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Relative or absolute URI of this manifest schema.",
+      "examples": [
+        "./doc-metadata-manifest.schema.json"
+      ]
+    },
+    "version": {
+      "description": "Manifest contract version. Version 1 is the only supported value.",
+      "const": 1
+    },
+    "defaults": {
+      "$ref": "#/$defs/defaults",
+      "description": "Default metadata and presentation behavior inherited by include entries."
+    },
+    "documentEligibility": {
+      "$ref": "#/$defs/documentEligibility",
+      "description": "Filters manifest-matched files to document-like UTF-8 text files that may be governed."
+    },
+    "include": {
+      "$ref": "#/$defs/includeArray",
+      "description": "Candidate governed files. String entries use defaults; object entries use pattern plus scoped metadata/presentation settings."
+    },
+    "exclude": {
+      "$ref": "#/$defs/patternArray",
+      "description": "Repository-root-relative patterns removed from candidate participation. The default is an empty array."
+    }
+  },
+  "$defs": {
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metadata",
+        "presentation"
+      ],
+      "properties": {
+        "metadata": {
+          "$ref": "#/$defs/metadataSettings",
+          "description": "Default managed metadata fields and block format."
+        },
+        "presentation": {
+          "$ref": "#/$defs/presentationSettings",
+          "description": "Default human-facing metadata presentation behavior."
+        }
+      }
+    },
+    "metadataSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "placement",
+        "versionField",
+        "createdField",
+        "updatedField",
+        "authorField",
+        "versioningMode",
+        "timestampFormat"
+      ],
+      "properties": {
+        "format": {
+          "type": "string",
+          "description": "Metadata block format.",
+          "enum": [
+            "yaml-front-matter",
+            "comment-block"
+          ],
+          "examples": [
+            "yaml-front-matter"
+          ]
+        },
+        "placement": {
+          "type": "string",
+          "description": "Where the metadata block is placed. YAML front matter supports top placement only.",
+          "enum": [
+            "top",
+            "bottom"
+          ],
+          "examples": [
+            "top"
+          ]
+        },
+        "versionField": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Managed field that stores the human-facing document revision.",
+          "examples": [
+            "Version"
+          ]
+        },
+        "createdField": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Managed field that stores the immutable metadata initialization timestamp.",
+          "examples": [
+            "Created"
+          ]
+        },
+        "updatedField": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Managed field that stores the last body-content-change timestamp.",
+          "examples": [
+            "Updated"
+          ]
+        },
+        "authorField": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Managed field that stores the detected content-change author.",
+          "examples": [
+            "Author"
+          ]
+        },
+        "versioningMode": {
+          "type": "string",
+          "description": "Version increment policy. The only supported mode increments on body content changes.",
+          "enum": [
+            "body-content-change"
+          ],
+          "default": "body-content-change"
+        },
+        "timestampFormat": {
+          "type": "string",
+          "description": "Generated timestamp format. rfc3339-utc writes UTC timestamps with an explicit +00:00 offset.",
+          "enum": [
+            "rfc3339-utc"
+          ],
+          "default": "rfc3339-utc"
+        },
+        "commentStart": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Opening marker for comment-block metadata."
+        },
+        "commentLinePrefix": {
+          "type": "string",
+          "description": "Optional prefix written before metadata lines inside comment-block metadata."
+        },
+        "commentEnd": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Closing marker for comment-block metadata."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "yaml-front-matter"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "properties": {
+              "placement": {
+                "const": "top"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "format": {
+                "const": "comment-block"
+              }
+            },
+            "required": [
+              "format"
+            ]
+          },
+          "then": {
+            "required": [
+              "commentStart",
+              "commentEnd"
+            ]
+          }
+        }
+      ]
+    },
+    "presentationSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether to generate the rich managed presentation region when the file format supports it.",
+          "default": true
+        },
+        "historyLimit": {
+          "description": "Maximum embedded Change History entries. Use 0 to suppress embedded entries.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "default": 20
+        },
+        "includeSeparator": {
+          "type": "boolean",
+          "description": "Whether to generate a visual separator between metadata and document body.",
+          "default": true
+        },
+        "spacingBreaks": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Markdown emits this many <br> lines; plain text emits this many physical blank lines.",
+          "default": 2
+        }
+      }
+    },
+    "includeEntry": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "README.md",
+            "*AGENT*.md"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "pattern"
+          ],
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Repository-root-relative glob pattern."
+            },
+            "metadata": {
+              "$ref": "#/$defs/metadataScopedSettings",
+              "description": "Scoped metadata settings for this include pattern."
+            },
+            "presentation": {
+              "$ref": "#/$defs/presentationSettings",
+              "description": "Scoped presentation settings for this include pattern."
+            }
+          },
+          "examples": [
+            {
+              "pattern": "src/*AGENT*.md",
+              "presentation": {
+                "historyLimit": 30,
+                "includeSeparator": false,
+                "spacingBreaks": 1
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "metadataScopedSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": [
+            "yaml-front-matter",
+            "comment-block"
+          ]
+        },
+        "placement": {
+          "type": "string",
+          "enum": [
+            "top",
+            "bottom"
+          ]
+        },
+        "versionField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "createdField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updatedField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorField": {
+          "type": "string",
+          "minLength": 1
+        },
+        "versioningMode": {
+          "type": "string",
+          "enum": [
+            "body-content-change"
+          ]
+        },
+        "timestampFormat": {
+          "type": "string",
+          "enum": [
+            "rfc3339-utc"
+          ]
+        },
+        "commentStart": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commentLinePrefix": {
+          "type": "string"
+        },
+        "commentEnd": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "includeArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/includeEntry"
+      }
+    },
+    "patternArray": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "extensionValue": {
+      "type": "string",
+      "description": "File extension value. The script normalizes to leading-dot lowercase.",
+      "pattern": "^\\.?[A-Za-z0-9][A-Za-z0-9._+-]*$",
+      "not": {
+        "anyOf": [
+          {
+            "pattern": "[*?\\[\\]/\\\\]"
+          },
+          {
+            "const": "."
+          }
+        ]
+      },
+      "examples": [
+        ".md",
+        "adoc"
+      ]
+    },
+    "extensionArray": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/extensionValue"
+      },
+      "uniqueItems": true
+    },
+    "documentEligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Determines which manifest matches are safe document files.",
+      "properties": {
+        "allowedExtensions": {
+          "$ref": "#/$defs/extensionArray",
+          "description": "Base allowed document extensions. If omitted, runtime defaults are .md, .markdown, and .txt. If present, this replaces that default base.",
+          "default": [
+            ".md",
+            ".markdown",
+            ".txt"
+          ]
+        },
+        "additionalAllowedExtensions": {
+          "$ref": "#/$defs/extensionArray",
+          "description": "Extensions appended to allowedExtensions.",
+          "default": []
+        },
+        "deniedExtensions": {
+          "$ref": "#/$defs/extensionArray",
+          "description": "Extensions that are never eligible. Denied extensions win.",
+          "default": []
+        },
+        "deniedPaths": {
+          "type": "array",
+          "description": "Repository-relative path or glob patterns that are never eligible.",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z]:"
+                },
+                {
+                  "pattern": "^/"
+                },
+                {
+                  "pattern": "\\\\"
+                },
+                {
+                  "pattern": "(^|/)\\.\\.(/|$)"
+                }
+              ]
+            }
+          },
+          "default": []
+        },
+        "allowExtensionless": {
+          "type": "boolean",
+          "description": "Whether extensionless manifest matches are eligible.",
+          "default": false
+        },
+        "failOnIneligibleMatches": {
+          "type": "boolean",
+          "description": "When true, ineligible manifest matches fail validation instead of only being reported.",
+          "default": false
+        }
+      }
+    }
+  }
+}

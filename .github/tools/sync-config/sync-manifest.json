@@ -1,0 +1,148 @@
+{
+  "$schema": "./sync-manifest.schema.json",
+  "schema_version": 1,
+  "entries": [
+    {
+      "source_repo": "BionicCode/workflows",
+      "source_ref": "main",
+      "source_glob": ".github/scripts/sync-files-from-manifest/documentation/**/*.*",
+      "target_directory": ".github/tools/sync-config/documentation/",
+      "glob": {
+        "recursive": true,
+        "include_hidden": false
+      },
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "whole_file"
+    },
+    {
+      "source_repo": "BionicCode/workflows",
+      "source_ref": "main",
+      "source_path": ".github/scripts/sync-files-from-manifest/schema/sync-manifest.schema.json",
+      "target_directory": ".github/tools/sync-config/",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "whole_file"
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": "AGENTS.md",
+      "target_directory": "",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": "AGENT_GUARDRAILS.md",
+      "target_directory": "",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": ".github/copilot-instructions.md",
+      "target_directory": ".github/",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": "DOCUMENTATION.md",
+      "target_directory": "",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": "src/AGENTS.md",
+      "target_directory": "src/",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": ".github/instructions/dotnet.instructions.md",
+      "target_directory": ".github/instructions/",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/template-visual-studio-repository",
+      "source_ref": "main",
+      "source_path": ".github/instructions/test.instructions.md",
+      "target_directory": ".github/instructions/",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "outside_markers",
+      "markers": {
+        "start": "<!-- BEGIN REPOSITORY SPECIFICS -->",
+        "end": "<!-- END REPOSITORY SPECIFICS -->"
+      }
+    },
+    {
+      "source_repo": "BionicCode/bioniccode-code-style",
+      "source_ref": "main",
+      "source_path": ".editorconfig",
+      "target_directory": "",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "whole_file"
+    },
+    {
+      "source_repo": "BionicCode/bioniccode-code-style",
+      "source_ref": "main",
+      "source_path": "Directory.Build.props",
+      "target_directory": "",
+      "direction": "source_to_target",
+      "lifecycle_policy": "enforce",
+      "uniqueness_policy": "none",
+      "managed_scope": "whole_file"
+    }
+  ]
+}

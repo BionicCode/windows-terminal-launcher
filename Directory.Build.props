@@ -1,0 +1,21 @@
+<Project>
+  <PropertyGroup>
+    <!-- Enforce IDE/code-style rules that are otherwise not all checked on build -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- .NET 8/9/10 already enable SDK analyzers by default, but keeping this explicit is harmless -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+
+    <!-- Optional: choose analyzer breadth. Start conservative; raise only if the repo is ready. -->
+    <AnalysisMode>Recommended</AnalysisMode>
+
+    <!-- Optional: pin analysis wave instead of floating with every newer SDK -->
+    <!-- <AnalysisLevel>8.0</AnalysisLevel> -->
+
+    <!-- Optional: fail the build on warnings after the repo is clean enough -->
+    <!-- <TreatWarningsAsErrors>true</TreatWarningsAsErrors> -->
+
+    <!-- Safer alternative to blanket TreatWarningsAsErrors -->
+    <!-- <WarningsAsErrors>nullable;IDE0055</WarningsAsErrors> -->
+  </PropertyGroup>
+</Project>

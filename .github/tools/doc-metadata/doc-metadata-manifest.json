@@ -1,0 +1,59 @@
+{
+  "$schema": "./doc-metadata-manifest.schema.json",
+  "version": 1,
+  "defaults": {
+    "metadata": {
+      "format": "yaml-front-matter",
+      "placement": "top",
+      "versionField": "Version",
+      "createdField": "Created",
+      "updatedField": "Updated",
+      "authorField": "Author",
+      "versioningMode": "body-content-change",
+      "timestampFormat": "rfc3339-utc"
+    },
+    "presentation": {
+      "enabled": true,
+      "historyLimit": 20,
+      "includeSeparator": true,
+      "spacingBreaks": 2
+    }
+  },
+  "documentEligibility": {
+    "allowedExtensions": [
+      ".md",
+      ".markdown",
+      ".txt"
+    ],
+    "additionalAllowedExtensions": [],
+    "deniedExtensions": [],
+    "deniedPaths": [],
+    "allowExtensionless": false,
+    "failOnIneligibleMatches": false
+  },
+  "include": [
+    "README.md",
+    "*AGENT*.md",
+    "*DOCUMENTATION*.md",
+    "docs/**/*.md",
+    "docs/**/*.markdown",
+    "test/*AGENT*.md",
+    "src/*AGENT*.md",
+    ".github/tools/doc-metadata/documentation/**/*.md",
+    ".github/tools/sync-config/documentation/**/*.md",
+    ".github/instructions/**/*.md",
+    ".github/*COPILOT*.md",
+    ".github/*copilot*.md",
+    ".github/*AGENT*.md",
+    {
+      "pattern": "**/*.txt",
+      "presentation": {
+        "enabled": false,
+        "historyLimit": 0,
+        "includeSeparator": true,
+        "spacingBreaks": 2
+      }
+    }
+  ],
+  "exclude": []
+}

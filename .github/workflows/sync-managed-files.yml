@@ -1,0 +1,142 @@
+name: Sync managed files
+
+on:
+  workflow_call:
+    inputs:
+      effective_event_name:
+        type: string
+        required: false
+        default: ""
+      default_branch:
+        type: string
+        required: false
+        default: ""
+      ref_name:
+        type: string
+        required: false
+        default: ""
+      ref_type:
+        type: string
+        required: false
+        default: ""
+      base_ref:
+        type: string
+        required: false
+        default: ""
+      pull_request_number:
+        type: string
+        required: false
+        default: ""
+    secrets:
+      SOURCE_REPO_READ_TOKEN:
+        required: false
+  workflow_dispatch:
+
+env:
+  EFFECTIVE_EVENT_NAME: ${{ inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name }}
+  EFFECTIVE_DEFAULT_BRANCH: ${{ inputs.default_branch != '' && inputs.default_branch || github.event.repository.default_branch }}
+  EFFECTIVE_REF_NAME: ${{ inputs.ref_name != '' && inputs.ref_name || github.ref_name }}
+  EFFECTIVE_REF_TYPE: ${{ inputs.ref_type != '' && inputs.ref_type || github.ref_type }}
+  EFFECTIVE_BASE_REF: ${{ inputs.base_ref != '' && inputs.base_ref || github.base_ref }}
+
+concurrency:
+  group: caller-sync-managed-files-${{ github.repository }}-${{ (inputs.pull_request_number != '' && inputs.pull_request_number) || github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  reject-non-default-manual-run:
+    if: >
+      (inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'workflow_dispatch' &&
+      (((inputs.ref_type != '' && inputs.ref_type) || github.ref_type) != 'branch' ||
+      ((inputs.ref_name != '' && inputs.ref_name) || github.ref_name) != ((inputs.default_branch != '' && inputs.default_branch) || github.event.repository.default_branch))
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Report invalid manual branch
+        shell: bash
+        run: |
+          echo "::error::Manifest initialization must be run from the repository default branch."
+          exit 1
+
+  inspect-manifest:
+    if: >
+      (inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'schedule' ||
+      ((inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'push' && (((inputs.ref_name != '' && inputs.ref_name) || github.ref_name) == ((inputs.default_branch != '' && inputs.default_branch) || github.event.repository.default_branch))) ||
+      ((inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'pull_request' && (((inputs.base_ref != '' && inputs.base_ref) || github.base_ref) == ((inputs.default_branch != '' && inputs.default_branch) || github.event.repository.default_branch))) ||
+      ((inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'workflow_dispatch' && (((inputs.ref_type != '' && inputs.ref_type) || github.ref_type) == 'branch') && (((inputs.ref_name != '' && inputs.ref_name) || github.ref_name) == ((inputs.default_branch != '' && inputs.default_branch) || github.event.repository.default_branch)))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      manifest_exists: ${{ steps.inspect.outputs.manifest_exists }}
+      manifest_json: ${{ steps.inspect.outputs.manifest_json }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Inspect caller manifest
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest_path=".github/tools/sync-config/sync-manifest.json"
+
+          if [ ! -f "$manifest_path" ]; then
+            echo "manifest_exists=false" >> "$GITHUB_OUTPUT"
+            echo "Manifest not found at $manifest_path."
+            exit 0
+          fi
+
+          echo "manifest_exists=true" >> "$GITHUB_OUTPUT"
+          {
+            echo "manifest_json<<__SYNC_MANIFEST_JSON__"
+            cat "$manifest_path"
+            echo "__SYNC_MANIFEST_JSON__"
+          } >> "$GITHUB_OUTPUT"
+          echo "Manifest found at $manifest_path."
+
+  fail-missing-manifest-on-pr:
+    needs: inspect-manifest
+    if: >
+      (inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'pull_request' &&
+      needs.inspect-manifest.outputs.manifest_exists != 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+
+    steps:
+      - name: Report missing PR manifest
+        shell: bash
+        run: |
+          echo "::error::.github/tools/sync-config/sync-manifest.json is missing. Run workflow_dispatch from the repository default branch or let a default-branch push/schedule initialize it."
+          exit 1
+
+  init-managed-file-sync:
+    needs: inspect-manifest
+    if: >
+      needs.inspect-manifest.outputs.manifest_exists != 'true' &&
+      (inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) != 'pull_request' &&
+      ((inputs.effective_event_name != '' && inputs.effective_event_name || github.event_name) == 'schedule' || ((((inputs.ref_type != '' && inputs.ref_type) || github.ref_type) == 'branch') && (((inputs.ref_name != '' && inputs.ref_name) || github.ref_name) == ((inputs.default_branch != '' && inputs.default_branch) || github.event.repository.default_branch))))
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: BionicCode/workflows/.github/workflows/sync-files-from-manifest.yml@main
+    with:
+      command: init
+
+  sync-managed-files:
+    needs: inspect-manifest
+    if: needs.inspect-manifest.outputs.manifest_exists == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: BionicCode/workflows/.github/workflows/sync-files-from-manifest.yml@main
+    with:
+      command: sync
+      manifest_json: ${{ needs.inspect-manifest.outputs.manifest_json }}
+    secrets:
+      source_token: ${{ secrets.SOURCE_REPO_READ_TOKEN }}

@@ -1,0 +1,280 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BionicCode/workflows/sync-manifest.schema.json",
+  "title": "Managed-file sync manifest",
+  "description": "Manifest consumed by BionicCode/workflows sync-files-from-manifest reusable workflow.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "entries"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "entries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/manifestEntry"
+      }
+    }
+  },
+  "$defs": {
+    "repoRelativeFilePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//)(?!.*[*?\\[]).+[^/]$"
+    },
+    "targetDirectory": {
+      "anyOf": [
+        {
+          "const": ""
+        },
+        {
+          "type": "string",
+          "minLength": 2,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//).+/$"
+        }
+      ]
+    },
+    "repoRelativeGlobPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*(?:^|/)\\.\\.?($|/))(?!.*//)(?=.*[*?\\[]).+[^/]$"
+    },
+    "globOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "recursive": {
+          "type": "boolean",
+          "default": false
+        },
+        "include_hidden": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "manifestEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_repo",
+        "source_ref",
+        "target_directory",
+        "direction",
+        "lifecycle_policy",
+        "uniqueness_policy",
+        "managed_scope"
+      ],
+      "properties": {
+        "source_repo": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^/\\s]+/[^/\\s]+$"
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_path": {
+          "$ref": "#/$defs/repoRelativeFilePath"
+        },
+        "source_glob": {
+          "$ref": "#/$defs/repoRelativeGlobPattern"
+        },
+        "target_directory": {
+          "$ref": "#/$defs/targetDirectory"
+        },
+        "glob": {
+          "$ref": "#/$defs/globOptions"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "source_to_target",
+            "target_to_source",
+            "two_way"
+          ]
+        },
+        "lifecycle_policy": {
+          "type": "string",
+          "enum": [
+            "enforce",
+            "seed_once",
+            "disabled"
+          ]
+        },
+        "uniqueness_policy": {
+          "type": "string",
+          "enum": [
+            "basename_unique",
+            "none"
+          ]
+        },
+        "managed_scope": {
+          "type": "string",
+          "enum": [
+            "whole_file",
+            "outside_markers",
+            "inside_markers"
+          ]
+        },
+        "markers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "end"
+          ],
+          "properties": {
+            "start": {
+              "type": "string",
+              "minLength": 1
+            },
+            "end": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "source_path"
+          ],
+          "not": {
+            "required": [
+              "source_glob"
+            ]
+          }
+        },
+        {
+          "required": [
+            "source_glob"
+          ],
+          "not": {
+            "required": [
+              "source_path"
+            ]
+          }
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "source_path"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "glob"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "source_glob": {
+                "pattern": "(^|/)\\*\\*($|/)"
+              }
+            },
+            "required": [
+              "source_glob"
+            ]
+          },
+          "then": {
+            "required": [
+              "glob"
+            ],
+            "properties": {
+              "glob": {
+                "required": [
+                  "recursive"
+                ],
+                "properties": {
+                  "recursive": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "managed_scope": {
+                "const": "whole_file"
+              }
+            },
+            "required": [
+              "managed_scope"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "markers"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "managed_scope": {
+                "enum": [
+                  "outside_markers",
+                  "inside_markers"
+                ]
+              }
+            },
+            "required": [
+              "managed_scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "markers"
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "x-sync-files-from-manifest": {
+    "manifest_shape": {
+      "schema_version_property": "schema_version",
+      "entries_property": "entries"
+    },
+    "entry_fields": {
+      "source_repo": "source_repo",
+      "source_ref": "source_ref",
+      "source_path": "source_path",
+      "source_glob": "source_glob",
+      "target_directory": "target_directory",
+      "direction": "direction",
+      "lifecycle_policy": "lifecycle_policy",
+      "uniqueness_policy": "uniqueness_policy",
+      "managed_scope": "managed_scope",
+      "glob": "glob",
+      "glob_recursive": "recursive",
+      "glob_include_hidden": "include_hidden",
+      "markers": "markers",
+      "marker_start": "start",
+      "marker_end": "end"
+    }
+  }
+}

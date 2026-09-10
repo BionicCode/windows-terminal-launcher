@@ -1,0 +1,180 @@
+name: Repository maintenance
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: repository-maintenance-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  normalize:
+    name: Normalize maintenance context
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      event_name: ${{ steps.normalize.outputs.event_name }}
+      event_payload_json: ${{ steps.normalize.outputs.event_payload_json }}
+      default_branch: ${{ steps.normalize.outputs.default_branch }}
+      ref_name: ${{ steps.normalize.outputs.ref_name }}
+      ref_type: ${{ steps.normalize.outputs.ref_type }}
+      ref: ${{ steps.normalize.outputs.ref }}
+      sha: ${{ steps.normalize.outputs.sha }}
+      base_ref: ${{ steps.normalize.outputs.base_ref }}
+      head_ref: ${{ steps.normalize.outputs.head_ref }}
+      pull_request_base_sha: ${{ steps.normalize.outputs.pull_request_base_sha }}
+      pull_request_head_sha: ${{ steps.normalize.outputs.pull_request_head_sha }}
+      pull_request_head_ref: ${{ steps.normalize.outputs.pull_request_head_ref }}
+      pull_request_head_repo_full_name: ${{ steps.normalize.outputs.pull_request_head_repo_full_name }}
+      pull_request_number: ${{ steps.normalize.outputs.pull_request_number }}
+      should_run_doc_metadata: ${{ steps.normalize.outputs.should_run_doc_metadata }}
+      should_run_sync_managed_files: ${{ steps.normalize.outputs.should_run_sync_managed_files }}
+      is_doc_metadata_repair_branch: ${{ steps.normalize.outputs.is_doc_metadata_repair_branch }}
+
+    steps:
+      - name: Compute orchestration context
+        id: normalize
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+          SHA: ${{ github.sha }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          PULL_REQUEST_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PULL_REQUEST_HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          $eventName = $env:EVENT_NAME
+          $defaultBranch = $env:DEFAULT_BRANCH
+          $refName = $env:REF_NAME
+          $ref = $env:REF
+          $refType = $env:REF_TYPE
+          $sha = $env:SHA
+          $baseRef = $env:BASE_REF
+          $headRef = $env:HEAD_REF
+          $pullRequestBaseSha = $env:PULL_REQUEST_BASE_SHA
+          $pullRequestHeadSha = $env:PULL_REQUEST_HEAD_SHA
+          $pullRequestHeadRef = $env:PULL_REQUEST_HEAD_REF
+          $pullRequestHeadRepoFullName = $env:PULL_REQUEST_HEAD_REPO_FULL_NAME
+          $pullRequestNumber = $env:PULL_REQUEST_NUMBER
+          $pushBefore = $env:PUSH_BEFORE
+          $pushAfter = $env:PUSH_AFTER
+
+          $isRepairBranch = $false
+          if ($eventName -eq "pull_request") {
+            $isRepairBranch = -not [string]::IsNullOrWhiteSpace($headRef) -and $headRef.StartsWith("codex/doc-metadata-repair/", [System.StringComparison]::Ordinal)
+          }
+          else {
+            $isRepairBranch = -not [string]::IsNullOrWhiteSpace($refName) -and $refName.StartsWith("codex/doc-metadata-repair/", [System.StringComparison]::Ordinal)
+          }
+
+          $shouldRunDocMetadata = $false
+          if (($eventName -eq "workflow_dispatch" -or $eventName -eq "pull_request" -or ($eventName -eq "push" -and $refType -eq "branch" -and @("main", "master") -contains $refName)) -and -not $isRepairBranch) {
+            $shouldRunDocMetadata = $true
+          }
+
+          $shouldRunSyncManagedFiles =
+            $eventName -eq "schedule" -or
+            ($eventName -eq "push" -and $refType -eq "branch" -and $refName -eq $defaultBranch) -or
+            ($eventName -eq "pull_request" -and $baseRef -eq $defaultBranch) -or
+            ($eventName -eq "workflow_dispatch" -and $refType -eq "branch" -and $refName -eq $defaultBranch)
+
+          $eventPayload = switch ($eventName) {
+            "pull_request" {
+              @{
+                pull_request = @{
+                  base = @{ sha = $pullRequestBaseSha }
+                  head = @{ sha = $pullRequestHeadSha }
+                }
+              }
+            }
+            "push" {
+              @{
+                before = $pushBefore
+                after = $pushAfter
+              }
+            }
+            default {
+              @{}
+            }
+          }
+
+          $eventPayloadJson = $eventPayload | ConvertTo-Json -Compress -Depth 8
+
+          @{
+            event_name = $eventName
+            event_payload_json = $eventPayloadJson
+            default_branch = $defaultBranch
+            ref_name = $refName
+            ref_type = $refType
+            ref = $ref
+            sha = $sha
+            base_ref = $baseRef
+            head_ref = $headRef
+            pull_request_base_sha = $pullRequestBaseSha
+            pull_request_head_sha = $pullRequestHeadSha
+            pull_request_head_ref = $pullRequestHeadRef
+            pull_request_head_repo_full_name = $pullRequestHeadRepoFullName
+            pull_request_number = $pullRequestNumber
+            should_run_doc_metadata = $shouldRunDocMetadata.ToString().ToLowerInvariant()
+            should_run_sync_managed_files = $shouldRunSyncManagedFiles.ToString().ToLowerInvariant()
+            is_doc_metadata_repair_branch = $isRepairBranch.ToString().ToLowerInvariant()
+          }.GetEnumerator() | ForEach-Object {
+            "{0}={1}" -f $_.Key, $_.Value >> $env:GITHUB_OUTPUT
+          }
+
+  doc-metadata:
+    name: Document metadata
+    needs: normalize
+    if: needs.normalize.outputs.should_run_doc_metadata == 'true'
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/doc-metadata.yml
+    with:
+      effective_event_name: ${{ needs.normalize.outputs.event_name }}
+      event_payload_json: ${{ needs.normalize.outputs.event_payload_json }}
+      default_branch: ${{ needs.normalize.outputs.default_branch }}
+      ref_name: ${{ needs.normalize.outputs.ref_name }}
+      ref: ${{ needs.normalize.outputs.ref }}
+      sha: ${{ needs.normalize.outputs.sha }}
+      base_ref: ${{ needs.normalize.outputs.base_ref }}
+      head_ref: ${{ needs.normalize.outputs.head_ref }}
+      pull_request_base_sha: ${{ needs.normalize.outputs.pull_request_base_sha }}
+      pull_request_head_sha: ${{ needs.normalize.outputs.pull_request_head_sha }}
+      pull_request_head_ref: ${{ needs.normalize.outputs.pull_request_head_ref }}
+      pull_request_head_repo_full_name: ${{ needs.normalize.outputs.pull_request_head_repo_full_name }}
+      pull_request_number: ${{ needs.normalize.outputs.pull_request_number }}
+
+  sync-managed-files:
+    name: Sync managed files
+    needs:
+      - normalize
+      - doc-metadata
+    if: ${{ !cancelled() && needs.normalize.outputs.should_run_sync_managed_files == 'true' && (needs.normalize.outputs.should_run_doc_metadata != 'true' || needs.doc-metadata.result == 'success') }}
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-managed-files.yml
+    with:
+      effective_event_name: ${{ needs.normalize.outputs.event_name }}
+      default_branch: ${{ needs.normalize.outputs.default_branch }}
+      ref_name: ${{ needs.normalize.outputs.ref_name }}
+      ref_type: ${{ needs.normalize.outputs.ref_type }}
+      base_ref: ${{ needs.normalize.outputs.base_ref }}
+      pull_request_number: ${{ needs.normalize.outputs.pull_request_number }}
+    secrets: inherit

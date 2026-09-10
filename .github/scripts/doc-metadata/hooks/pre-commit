@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+changed_files_json=".git/doc-metadata-changed-files.json"
+trap 'rm -f "$changed_files_json"' EXIT
+
+pwsh ./.github/scripts/doc-metadata/update-doc-metadata.ps1 \
+  -Mode Update \
+  -Root . \
+  -ChangedFilesOutputPath "$changed_files_json"
+
+pwsh -NoLogo -NoProfile -Command '
+  $json = Get-Content -LiteralPath $args[0] -Raw | ConvertFrom-Json
+  foreach ($file in @($json.changedFiles)) {
+    if (Test-Path -LiteralPath $file -PathType Leaf) {
+      git add -- $file
+    }
+  }
+' "$changed_files_json"
