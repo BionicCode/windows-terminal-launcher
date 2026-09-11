@@ -1,4 +1,13 @@
-﻿usage: lit.exe [alias] [options]...
+﻿---
+Version: 1
+Created: 2026-09-11T20:43:19+00:00
+Updated: 2026-09-11T20:43:19+00:00
+Author: BionicCode
+---
+--------------------------------------------------------------------------------
+
+
+usage: lit.exe [alias] [options]...
 
 aliases:
   If no alias is provided, the default Windows Terminal profile is used.
