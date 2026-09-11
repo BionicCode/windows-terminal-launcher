@@ -1,0 +1,26 @@
+﻿---
+# The alias to Windows Terminal profile name mapping. 
+# The alias is the key, and the exact Windows Terminal profile name is the value. 
+# 
+# The alias is used in the command line to launch a specific Windows Terminal profile.
+#
+# NOTE
+# ----
+# If no alias is specified, the default Windows Terminal profile will be used.
+#
+# Profiles are internally identified by their GUID, not their name.  
+# If you accidentally create two profiles whose names differ only in case (e.g. "PowerShell" and "powershell"), 
+# both will get distinct GUIDs, but only the first will be addressable by name. 
+# The second is reachable only via its GUID. 
+TerminalProfiles:
+  ps: PowerShell
+  psa: PowerShell (Admin)
+  gb: Git Bash
+  cmd: Command Prompt
+
+# The default alias to use when launching Windows Terminal without specifying a profile.
+# If not specified or the following line is removed, the default Windows Terminal profile will be used.
+DefaultAlias: ps
+
+# Launch the Windows Terminal profile in the existing window instead of a new window.
+ReuseTerminalWindow:

@@ -1,0 +1,17 @@
+﻿usage: lit.exe [alias] [options]...
+
+aliases:
+  If no alias is provided, the default Windows Terminal profile is used.
+  build       Build the project and generate output files.
+  clean       Clean the output directory and remove generated files.
+  test        Run tests for the project.
+  deploy      Deploy the project to the specified environment.
+  help        Show this help message and exit.
+
+options:
+  -h, --help            Show this help message and exit.
+  -v, --version         Show version information and exit.
+  -c, --config <file>   Specify a configuration file to use.
+  -o, --output <dir>    Specify the output directory for generated files.
+  -f, --force           Overwrite existing files without prompting.
+  -d, --debug           Enable debug mode for more verbose output.
