@@ -1,7 +1,7 @@
 ---
-Version: 1
-Created: 2026-05-28T19:51:22+00:00
-Updated: 2026-05-28T19:51:22+00:00
+Version: 2
+Created: 2026-05-28T20:29:29+00:00
+Updated: 2026-08-23T18:59:48+00:00
 Author: BionicCode
 ---
 <!-- doc-metadata-presentation:start -->
@@ -19,7 +19,7 @@ Author: BionicCode
 
 # Sync Manifest
 
-`sync-manifest.json` tells the reusable workflow which source files are managed and where they are projected in the caller repository. Caller repositories own their manifest; this workflows repository owns the engine, schema, semantic rules, starter template, and copied reference documentation.
+`sync-manifest.json` tells the reusable workflow which source files are managed and where they are projected in the caller repository. Caller repositories own their manifest at `.github/tools/sync-config/sync-manifest.json`; this workflows repository owns the engine, schema, semantic rules, starter template, and copied reference documentation.
 
 ## Complete Shape
 
@@ -42,7 +42,7 @@ Author: BionicCode
       "source_repo": "BionicCode/workflows",
       "source_ref": "main",
       "source_glob": ".github/scripts/sync-files-from-manifest/documentation/**/*.md",
-      "target_directory": ".github/sync-config/documentation/",
+      "target_directory": ".github/tools/sync-config/documentation/",
       "glob": {
         "recursive": true,
         "include_hidden": false
@@ -178,7 +178,7 @@ Recursive documentation sync:
   "source_repo": "BionicCode/workflows",
   "source_ref": "main",
   "source_glob": ".github/scripts/sync-files-from-manifest/documentation/**/*.md",
-  "target_directory": ".github/sync-config/documentation/",
+  "target_directory": ".github/tools/sync-config/documentation/",
   "glob": {
     "recursive": true
   },
@@ -226,7 +226,7 @@ Name-fragment filter:
   "source_repo": "BionicCode/workflows",
   "source_ref": "main",
   "source_glob": ".github/scripts/sync-files-from-manifest/documentation/sync-manifest*.md",
-  "target_directory": ".github/sync-config/documentation/",
+  "target_directory": ".github/tools/sync-config/documentation/",
   "direction": "source_to_target",
   "lifecycle_policy": "enforce",
   "uniqueness_policy": "none",
