@@ -1,4 +1,4 @@
-﻿usage: lit.exe [alias] [options]...
+﻿usage: lit [alias] [options...]
 
 aliases:
   If no alias is provided, the default Windows Terminal profile is used.

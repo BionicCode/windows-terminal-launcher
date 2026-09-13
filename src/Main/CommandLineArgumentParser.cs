@@ -14,7 +14,7 @@ internal static class CommandLineArgumentParser
     /// <param name="validOptions">The lookup table of valid command options.</param>
     /// <returns>A <see cref="CommandLineCommand"/> object containing the parsed command arguments like Windows Terminal profile alias and command options.</returns>
     /// <exception cref="InvalidCommandArgumnentException">Thrown when an invalid command argument is encountered.</exception>
-    /// <remarks>Expects a command syntax of the form: <c>lit.exe [alias] [options]...</c></remarks>
+    /// <remarks>Expects a command syntax of the form: <c>lit [alias] [options...]</c></remarks>
     public async static Task<CommandLineCommand> CreateCommandAsync(string[]? arguments, IReadOnlyDictionary<string, CommandLineOption> validOptions)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -40,7 +40,7 @@ internal static class CommandLineArgumentParser
             {
                 if (!validOptions.TryGetValue(arg, out CommandLineOption option))
                 {
-                    throw new InvalidCommandArgumnentException($"Invalid command option '{arg}'. Use '[-h | --help]' to see the list of valid options.");
+                    throw new InvalidCommandArgumnentException($"Invalid command option '{arg}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
                 }
 
                 _ = options.Add(option);
@@ -50,7 +50,7 @@ internal static class CommandLineArgumentParser
                 // Only one alias can be specified, so if we already have an alias, throw an exception
                 if (!string.IsNullOrEmpty(aliasKey))
                 {
-                    throw new InvalidCommandArgumnentException("Only one alias a rgument can be specified.");
+                    throw new InvalidCommandArgumnentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
                 }
 
                 aliasKey = arg;

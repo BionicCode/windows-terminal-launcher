@@ -8,10 +8,3 @@ internal enum CommandLineOptionId
     ListAliases,
     RunAsAdmin
 }
-
-internal enum ExecutionMode
-{
-    Undefined = 0,
-    Normal,
-    Admin
-}

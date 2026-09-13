@@ -11,27 +11,50 @@ using System.Windows;
 /// </summary>
 public partial class App : Application
 {
-    private static FrozenDictionary<string, CommandLineOption> ValidCommandOptionsTable { get; } = new KeyValuePair<string, CommandLineOption>[]
+    private static FrozenDictionary<string, CommandLineOption> ValidCommandOptionsTable { get; } 
+        
+    static App()
     {
-        new KeyValuePair<string, CommandLineOption>("-h", new CommandLineOption("-h", CommandLineOptionId.Help, "Show help e.g. list options and aliases", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("--help", new CommandLineOption("--help", CommandLineOptionId.Help, "Show help e.g. show syntax and list options and registered aliases", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("-v", new CommandLineOption("-v", CommandLineOptionId.Version, "Show tool version", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("--version", new CommandLineOption("--version", CommandLineOptionId.Version, "Show tool version", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("-l", new CommandLineOption("-l", CommandLineOptionId.ListAliases, "List registered aliases", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("--list", new CommandLineOption("--list", CommandLineOptionId.ListAliases, "List registered aliases", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("-a", new CommandLineOption("-a", CommandLineOptionId.RunAsAdmin, "Run as administrator", IsOptional: true)),
-        new KeyValuePair<string, CommandLineOption>("--admin", new CommandLineOption("--admin", CommandLineOptionId.RunAsAdmin, "Run as administrator", IsOptional: true)),
-    }.ToFrozenDictionary();
+        var table = new Dictionary<string, CommandLineOption>();
+
+        var helpOption = new CommandLineOption("--help", "-h", CommandLineOptionId.Help, "Show help e.g. list options and aliases", IsOptional: true);
+        table.Add("-h", helpOption);
+        table.Add("--help", helpOption);
+
+        var versionOption = new CommandLineOption("--version", "-v", CommandLineOptionId.Version, "Show tool version", IsOptional: true);
+        table.Add("-v", versionOption);
+        table.Add("--version", versionOption);
+
+        var listAliasesOption = new CommandLineOption("--list", "-l", CommandLineOptionId.ListAliases, "List registered aliases", IsOptional: true);
+        table.Add("-l", listAliasesOption);
+        table.Add("--list", listAliasesOption);
+
+        var runAsAdminOption = new CommandLineOption("--admin", "-a", CommandLineOptionId.RunAsAdmin, "Run as administrator", IsOptional: true);
+        table.Add("-a", runAsAdminOption);
+        table.Add("--admin", runAsAdminOption);
+
+        ValidCommandOptionsTable = table.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+    }
 
     protected async override void OnStartup(StartupEventArgs e)
     {
         string[] commandArgs = e?.Args ?? [];
-        CommandLineCommand command = await CommandLineArgumentParser.CreateCommandAsync(commandArgs, ValidCommandOptionsTable);
+        CommandLineCommand command;
+        try
+        {
+            command = await CommandLineArgumentParser.CreateCommandAsync(commandArgs, ValidCommandOptionsTable);
+        }
+        catch (InvalidCommandArgumnentException ex)
+        {
+            CommandHandler.ShowError(ex.Message);
+            return;
+        }
+
         switch (command.Options)
         {
             case var options when options.Contains(CommandLineOptionId.Help):
                 base.OnStartup(e);
-                //ShowHelp();
+                await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable);
                 break;
             case var options when options.Contains(CommandLineOptionId.Version):
                 base.OnStartup(e);
@@ -39,11 +62,11 @@ public partial class App : Application
                 break;
             case var options when options.Contains(CommandLineOptionId.ListAliases):
                 base.OnStartup(e);
-                //ListAliases();
+                await CommandHandler.ShowAliasesAsync();
                 break;
             default:
                 CommandHandler.LaunchTerminalWithAlias(command);
-                //Shutdown();
+                Shutdown();
                 break;
         }
     }

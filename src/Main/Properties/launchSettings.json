@@ -11,6 +11,18 @@
       "commandName": "Project",
       "commandLineArgs": "gb",
       "workingDirectory": "I:\\GitHubRepositories\\CyclingData"
+    },
+    "List-Option": {
+      "commandName": "Project",
+      "commandLineArgs": "--list"
+    },
+    "Admin-Option": {
+      "commandName": "Project",
+      "commandLineArgs": "--admin"
+    },
+    "Error-Option": {
+      "commandName": "Project",
+      "commandLineArgs": "--hhelp"
     }
   }
 }
