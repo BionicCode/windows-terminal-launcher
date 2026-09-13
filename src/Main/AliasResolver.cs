@@ -2,8 +2,17 @@
 
 internal static class AliasResolver
 {
-    public static async Task<Alias> CreateAliasAsync(string aliasKey)
+    public static async Task<Alias> CreateAliasAsync(string aliasKey, Configuration configuration)
     {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        bool isUsingDefaultAlias = false;
+        if (string.IsNullOrWhiteSpace(aliasKey))
+        {
+            aliasKey = configuration.DefaultAlias;
+            isUsingDefaultAlias = true;
+        }
+
         Alias? resolvedAlias;
         if (string.IsNullOrWhiteSpace(aliasKey))
         {
@@ -11,10 +20,13 @@ internal static class AliasResolver
         }
         else
         {
-            Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
             if (!configuration.AliasMap.TryGetValue(aliasKey, out resolvedAlias))
             {
-                throw new InvalidCommandArgumnentException($"Alias '{aliasKey}' not found.");
+                string message = isUsingDefaultAlias 
+                    ? $"The default alias '{aliasKey}' provided in the configuration YAML file is not defined."
+                    : $"The provided alias '{aliasKey}' is not defined in the configuration YAML file.";
+
+                throw new InvalidCommandArgumnentException(message);
             }
         }
 

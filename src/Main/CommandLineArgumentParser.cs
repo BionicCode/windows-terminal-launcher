@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 
 internal static class CommandLineArgumentParser
 {
@@ -23,10 +24,10 @@ internal static class CommandLineArgumentParser
         if (arguments.Length == 0)
         {
             Alias defaultAlias = AliasResolver.CreateDefaultAlias();
-            return new CommandLineCommand(defaultAlias, []);
+            return new CommandLineCommand(defaultAlias, [], CommandContext.Default);
         }
 
-        var options = new List<CommandLineOption>();
+        var options = new HashSet<CommandLineOption>(CommandLineOptionIdComparer.Instance);
         foreach (string arg in arguments)
         {
             if (string.IsNullOrWhiteSpace(arg))
@@ -42,7 +43,7 @@ internal static class CommandLineArgumentParser
                     throw new InvalidCommandArgumnentException($"Invalid command option '{arg}'. Use '[-h | --help]' to see the list of valid options.");
                 }
 
-                options.Add(option);
+                _ = options.Add(option);
             }
             else
             {
@@ -57,7 +58,42 @@ internal static class CommandLineArgumentParser
             }
         }
 
-        Alias alias = await AliasResolver.CreateAliasAsync(aliasKey);
-        return new CommandLineCommand(alias, options.ToImmutableList());
+        var immutableOptions = options.ToImmutableHashSet(CommandLineOptionIdComparer.Instance);
+        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
+        Alias alias = await AliasResolver.CreateAliasAsync(aliasKey, configuration);
+        CommandContext context = CreateCommandContext(configuration, immutableOptions);
+
+        return new CommandLineCommand(alias, immutableOptions, context);
     }
+
+    private static CommandContext CreateCommandContext(Configuration configuration, ImmutableHashSet<CommandLineOption> options)
+    {
+        ExecutionMode executionMode = options.Contains(CommandLineOptionId.RunAsAdmin) 
+            ? ExecutionMode.Admin 
+            : ExecutionMode.Normal;
+        string launchMode = configuration.ReuseTerminalWindow 
+            ? LaunchModes.LastActiveWindow 
+            : LaunchModes.NewWindow;
+
+        return new CommandContext(launchMode, executionMode);
+    }
+}
+
+internal sealed class CommandLineOptionIdComparer : 
+    IEqualityComparer<CommandLineOption>,
+    IEqualityComparer<CommandLineOptionId>
+{
+    public static CommandLineOptionIdComparer Instance { get; } = new CommandLineOptionIdComparer();
+
+    private CommandLineOptionIdComparer() { }
+
+    public bool Equals(CommandLineOption x, CommandLineOption y) => Equals(x.OptionType, y.OptionType);
+    public bool Equals(CommandLineOptionId x, CommandLineOption y) => Equals(x, y.OptionType);
+    public bool Equals(CommandLineOption x, CommandLineOptionId y) => Equals(x.OptionType, y);
+
+    public bool Equals(CommandLineOptionId x, CommandLineOptionId y) => x == y;
+
+    public int GetHashCode(CommandLineOption obj) => GetHashCode(obj.OptionType);
+
+    public int GetHashCode([DisallowNull] CommandLineOptionId obj) => obj.GetHashCode();
 }

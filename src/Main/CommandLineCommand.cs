@@ -2,4 +2,4 @@
 
 using System.Collections.Immutable;
 
-internal readonly record struct CommandLineCommand(Alias Alias, IImmutableList<CommandLineOption> Options, CommandContext Context);
+internal readonly record struct CommandLineCommand(Alias Alias, ImmutableHashSet<CommandLineOption> Options, CommandContext Context);

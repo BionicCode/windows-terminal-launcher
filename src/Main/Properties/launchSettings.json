@@ -1,0 +1,16 @@
+{
+  "profiles": {
+    "Main": {
+      "commandName": "Project"
+    },
+    "Help-Option": {
+      "commandName": "Project",
+      "commandLineArgs": "--help"
+    },
+    "Git Bash": {
+      "commandName": "Project",
+      "commandLineArgs": "gb",
+      "workingDirectory": "I:\\GitHubRepositories\\CyclingData"
+    }
+  }
+}

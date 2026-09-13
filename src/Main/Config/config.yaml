@@ -23,4 +23,4 @@ TerminalProfiles:
 DefaultAlias: ps
 
 # Launch the Windows Terminal profile in the existing window instead of a new window.
-ReuseTerminalWindow:
+ReuseTerminalWindow: true
