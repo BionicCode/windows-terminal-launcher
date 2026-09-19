@@ -7,13 +7,22 @@ internal static class AliasResolver
         ArgumentNullException.ThrowIfNull(configuration);
 
         bool isUsingDefaultAlias = false;
+
+        Alias? resolvedAlias;
+        if (aliasKey is not null && aliasKey.StartsWith('"') && aliasKey.EndsWith('"'))
+        {
+            string resolvedName = aliasKey[1..^1];
+            resolvedAlias = new Alias(resolvedName, resolvedName, false);
+
+            return resolvedAlias;
+        }
+
         if (string.IsNullOrWhiteSpace(aliasKey))
         {
             aliasKey = configuration.DefaultAlias;
             isUsingDefaultAlias = true;
         }
 
-        Alias? resolvedAlias;
         if (string.IsNullOrWhiteSpace(aliasKey))
         {
             resolvedAlias = CreateDefaultAlias();
@@ -22,11 +31,11 @@ internal static class AliasResolver
         {
             if (!configuration.AliasMap.TryGetValue(aliasKey, out resolvedAlias))
             {
-                string message = isUsingDefaultAlias 
+                string message = isUsingDefaultAlias
                     ? $"The default alias '{aliasKey}' provided in the configuration YAML file is not defined."
                     : $"The provided alias '{aliasKey}' is not defined in the configuration YAML file.";
 
-                throw new InvalidCommandArgumnentException(message);
+                throw new InvalidCommandArgumentException(message);
             }
         }
 

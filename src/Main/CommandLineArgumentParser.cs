@@ -1,35 +1,38 @@
 ﻿namespace Main;
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 
 internal static class CommandLineArgumentParser
 {
     /// <summary>
     /// Parses the command line arguments and returns a CommandLineCommand object containing the alias and options.
     /// </summary>
-    /// <param name="arguments">The command line arguments to parse.</param>
+    /// <param name="rawArguments">The command line arguments to parse.</param>
     /// <param name="validOptions">The lookup table of valid command options.</param>
     /// <returns>A <see cref="CommandLineCommand"/> object containing the parsed command arguments like Windows Terminal profile alias and command options.</returns>
-    /// <exception cref="InvalidCommandArgumnentException">Thrown when an invalid command argument is encountered.</exception>
+    /// <exception cref="InvalidCommandArgumentException">Thrown when an invalid command argument is encountered.</exception>
     /// <remarks>Expects a command syntax of the form: <c>lit [alias] [options...]</c></remarks>
-    public async static Task<CommandLineCommand> CreateCommandAsync(string[]? arguments, IReadOnlyDictionary<string, CommandLineOption> validOptions)
+    public async static Task<CommandLineCommand> CreateCommandAsync(string[]? rawArguments, IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptions)
     {
-        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(rawArguments);
         ArgumentNullException.ThrowIfNull(validOptions);
 
         string aliasKey = string.Empty;
-        if (arguments.Length == 0)
+        if (rawArguments.Length == 0)
         {
-            Alias defaultAlias = AliasResolver.CreateDefaultAlias();
-            return new CommandLineCommand(defaultAlias, [], CommandContext.Default);
+            CommandLineCommand defaultCommand = CreateDefaultCommand();
+            return defaultCommand;
         }
 
-        var options = new HashSet<CommandLineOption>(CommandLineOptionIdComparer.Instance);
-        foreach (string arg in arguments)
+        var options = new Dictionary<CommandLineOptionId, CommandLineOption>(CommandLineOptionIdComparer.Instance);
+        for (int index = 0; index < rawArguments.Length; index++)
         {
+            string arg = rawArguments[index];
             if (string.IsNullOrWhiteSpace(arg))
             {
                 continue;
@@ -38,19 +41,34 @@ internal static class CommandLineArgumentParser
             // Must be an option if it starts with a dash
             if (arg.StartsWith('-'))
             {
-                if (!validOptions.TryGetValue(arg, out CommandLineOption option))
+                if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
                 {
-                    throw new InvalidCommandArgumnentException($"Invalid command option '{arg}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
+                    throw new InvalidCommandArgumentException($"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
                 }
 
-                _ = options.Add(option);
+                string value = optionDescriptor.Kind is CommandLineOptionKind.Value
+                    ? rawArguments[++index]
+                    : string.Empty;
+
+                if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath)
+                {
+                    if (!TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                    {
+                        throw new InvalidCommandArgumentException($"Invalid source path argument at argument index '{index}'. The path is malformed.");
+                    }
+
+                    value = normalizedSourcePath;
+                }
+
+                var option = new CommandLineOption(optionDescriptor, value);
+                options.Add(optionDescriptor.OptionType, option);
             }
             else
             {
                 // Only one alias can be specified, so if we already have an alias, throw an exception
                 if (!string.IsNullOrEmpty(aliasKey))
                 {
-                    throw new InvalidCommandArgumnentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
+                    throw new InvalidCommandArgumentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
                 }
 
                 aliasKey = arg;
@@ -58,17 +76,100 @@ internal static class CommandLineArgumentParser
             }
         }
 
-        var immutableOptions = options.ToImmutableHashSet(CommandLineOptionIdComparer.Instance);
+        var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
         Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
         Alias alias = await AliasResolver.CreateAliasAsync(aliasKey, configuration);
-        CommandContext context = CreateCommandContext(configuration, immutableOptions);
-
-        return new CommandLineCommand(alias, immutableOptions, context);
+        CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
+        var arguments = new CommandArguments(alias, immutableOptionsTable);
+        return new CommandLineCommand(arguments, context);
     }
 
-    private static CommandContext CreateCommandContext(Configuration configuration, ImmutableHashSet<CommandLineOption> options)
+    private static bool TryNormalizeWindowsPath(
+    string path,
+    [NotNullWhen(true)] out string? normalizedPath)
     {
-        ExecutionMode executionMode = options.Contains(CommandLineOptionId.RunAsAdmin) 
+        normalizedPath = null;
+
+        if (string.IsNullOrWhiteSpace(path)
+            || !Path.IsPathFullyQualified(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+
+            if (!HasValidWindowsPathComponents(fullPath))
+            {
+                return false;
+            }
+
+            normalizedPath = fullPath;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        catch (PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static bool IsPathArgument(string arg)
+    {
+        if (string.IsNullOrWhiteSpace(arg))
+        {
+            return false;
+        }
+
+        bool isPathCandidate = arg.StartsWith('"') && arg.EndsWith('"')
+            || arg.StartsWith('\'') && arg.EndsWith('\'');
+
+        return isPathCandidate && IsLexicallyValidPath(arg);
+    }
+
+    private static bool IsLexicallyValidPath(string path)
+    {
+        // Check for invalid characters
+        SearchValues<char> invalidPathChars = SearchValues.Create(Path.GetInvalidPathChars());
+        if (path.ContainsAny(invalidPathChars))
+        {
+            return false;
+        }
+
+        // Optional: Check for invalid file name characters in segments
+        string[] segments = path.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
+        foreach (string segment in segments)
+        {
+            if (segment.ContainsAny(invalidNameChars))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static CommandLineCommand CreateDefaultCommand()
+    {
+        Alias defaultAlias = AliasResolver.CreateDefaultAlias();
+        CommandArguments defaultArguments = CommandArguments.Default with { Alias = defaultAlias };
+        CommandContext defaultContext = CommandContext.Default;
+
+        return new CommandLineCommand(defaultArguments, defaultContext);
+    }
+
+    private static CommandContext CreateCommandContext(Configuration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)
+    {
+        ExecutionMode executionMode = options.ContainsKey(CommandLineOptionId.RunAsAdmin) 
             ? ExecutionMode.Admin 
             : ExecutionMode.Normal;
         string launchMode = configuration.ReuseTerminalWindow 
@@ -87,13 +188,13 @@ internal sealed class CommandLineOptionIdComparer :
 
     private CommandLineOptionIdComparer() { }
 
-    public bool Equals(CommandLineOption x, CommandLineOption y) => Equals(x.OptionType, y.OptionType);
-    public bool Equals(CommandLineOptionId x, CommandLineOption y) => Equals(x, y.OptionType);
-    public bool Equals(CommandLineOption x, CommandLineOptionId y) => Equals(x.OptionType, y);
+    public bool Equals(CommandLineOption x, CommandLineOption y) => Equals(x.Descriptor.OptionType, y.Descriptor.OptionType);
+    public bool Equals(CommandLineOptionId x, CommandLineOption y) => Equals(x, y.Descriptor.OptionType);
+    public bool Equals(CommandLineOption x, CommandLineOptionId y) => Equals(x.Descriptor.OptionType, y);
 
     public bool Equals(CommandLineOptionId x, CommandLineOptionId y) => x == y;
 
-    public int GetHashCode(CommandLineOption obj) => GetHashCode(obj.OptionType);
+    public int GetHashCode(CommandLineOption obj) => GetHashCode(obj.Descriptor.OptionType);
 
     public int GetHashCode([DisallowNull] CommandLineOptionId obj) => obj.GetHashCode();
 }

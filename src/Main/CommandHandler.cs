@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Drawing;
 using System.Text;
@@ -39,11 +40,11 @@ internal static class CommandHandler
         startInfo.ArgumentList.Add(targetWindow);
 
         // Control terminal profile. If ommitted, wt.exe uses the default profile.
-        bool isProfileSpecified = !string.IsNullOrWhiteSpace(command.Alias.ResolvedName);
+        bool isProfileSpecified = !string.IsNullOrWhiteSpace(command.Arguments.Alias.ResolvedName);
         if (isProfileSpecified)
         {
             startInfo.ArgumentList.Add("-p");
-            startInfo.ArgumentList.Add(command.Alias.ResolvedName);
+            startInfo.ArgumentList.Add(command.Arguments.Alias.ResolvedName);
         }
 
         // Control working directory.
@@ -55,7 +56,7 @@ internal static class CommandHandler
         using Process? process = Process.Start(startInfo);
     }
 
-    public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOption> validOptionsTable)
+    public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
@@ -76,7 +77,7 @@ internal static class CommandHandler
         ShowInfoDialog(helpMessageBuilder);
     }
 
-    public static void ShowOptions(IReadOnlyDictionary<string, CommandLineOption> validOptionsTable)
+    public static void ShowOptions(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
@@ -86,16 +87,16 @@ internal static class CommandHandler
         ShowInfoDialog(helpMessageBuilder);
     }
 
-    private static StringBuilder CreateOptionsMessage(IReadOnlyDictionary<string, CommandLineOption> validOptionsTable, StringBuilder messageBuilder)
+    private static StringBuilder CreateOptionsMessage(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, StringBuilder messageBuilder)
     {
         _ = messageBuilder.AppendLine()
             .AppendLine("Options:");
 
-        IEnumerable<CommandLineOption> availableOptions = validOptionsTable.Values.Distinct();
+        IEnumerable<CommandLineOptionDescriptor> availableOptions = validOptionsTable.Values.Distinct();
         string optionsSeparator = ", ";
         int optionsSeparatorLength = optionsSeparator.Length;
         int maxOptionLength = availableOptions.Max(option => option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength);
-        foreach (CommandLineOption option in availableOptions.OrderBy(o => o.Name))
+        foreach (CommandLineOptionDescriptor option in availableOptions.OrderBy(o => o.Name))
         {
             int padding = maxOptionLength - (option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength) + Padding;
             _ = messageBuilder.Append(' ', LineIndentation)
@@ -111,7 +112,7 @@ internal static class CommandHandler
     {
         _ = messageBuilder.AppendLine("Usage:")
             .Append(' ', LineIndentation)
-            .AppendLine("lt [alias] [options...]")
+            .AppendLine(@"lt [alias] [options...] [""<location>""]")
             .AppendLine()
             .AppendLine("Aliases:");
 
@@ -123,6 +124,10 @@ internal static class CommandHandler
             .AppendLine("If no such default alias was specified, the default")
             .Append(' ', LineIndentation)
             .AppendLine("profile of the Windows Terminal will be used.")
+            .Append(' ', LineIndentation)
+            .AppendLine("Furthermore, if the option '-c' or '--config' is specified,")
+            .Append(' ', LineIndentation)
+            .AppendLine("the alias argument will be ignored.")
             .AppendLine();
 
         int maxAliasLength = configuration.Aliases.Max(alias => alias.Name.Length);
@@ -182,5 +187,25 @@ internal static class CommandHandler
         };
 
         dialog.Show();
+    }
+
+    internal static async Task HandleMode(CommandLineCommand command)
+    {
+        CommandLineOptionId commandMode = command.Arguments.OptionsTable
+            .Single(option => option.Descriptor.Kind is CommandLineOptionKind.Mode)
+            .Descriptor.OptionType;
+        switch (commandMode)
+        {
+            case CommandLineOptionId.SetConfigLocation:
+                SetConfigLocationAsync(command.Arguments.OptionsTable);
+                break;
+            default:
+                break;
+        }
+    }
+
+    private static void SetConfigLocationAsync(ImmutableHashSet<CommandLineOption> options)
+    {
+        throw new NotImplementedException();
     }
 }
