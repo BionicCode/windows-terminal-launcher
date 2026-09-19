@@ -66,16 +66,16 @@ public partial class App : Application
             return;
         }
 
-        ThrowIfCommandIsInvalid(command);
+        CommandValidator.ThrowIfCommandSyntaxIsInvalid(command);
 
         switch (command.Arguments.OptionsTable)
         {
             case var _ when command.HasMode:
-                base.OnStartup(e);
                 await CommandHandler.HandleMode(command);
                 break;
             case var options when options.ContainsKey(CommandLineOptionId.Help):
-                base.OnStartup(e); 
+                base.OnStartup(e);
+                await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable);
                 break;
             case var options when options.ContainsKey(CommandLineOptionId.ListAliases):
                 base.OnStartup(e);
@@ -87,18 +87,12 @@ public partial class App : Application
                 break;
         }
     }
-
-    private static ThrowIfCommandIsInvalid(CommandLineCommand command)
-    {
-
-    }
 }
 
 internal static class CommandValidator
 {
-    public bool IsCommandValid(CommandLineCommand command)
+    public static void ThrowIfCommandSyntaxIsInvalid(CommandLineCommand command)
     {
-        var discoveredCommandOptions
         CommandLineOption? modeOption = null;
         void ThrowIfModeAlreadySet()
         {
@@ -117,13 +111,19 @@ internal static class CommandValidator
                     ThrowIfModeAlreadySet();
 
                     modeOption = option;
-                    CommandLineOption? destinationPathOption = null;
+                    CommandLineOption destinationPathOption = default;
                     if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption sourcePathOption))
                     {
                         string sourcePath = sourcePathOption.Value;
                         if (string.IsNullOrWhiteSpace(sourcePath))
                         {
                             throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
+                        }
+
+                        if (Path.HasExtension(sourcePath)
+                            && !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
                         }
                     }
                     else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out destinationPathOption))
@@ -133,52 +133,26 @@ internal static class CommandValidator
                         {
                             throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
                         }
-                    }
-                    foreach (CommandLineOption option in command.Arguments.OptionsTable)
-                    {
-                        else if (option.Descriptor.OptionType is CommandLineOptionId.DestinationPath)
-                        {
-                            string destinationPath = option.Value;
-                            if (string.IsNullOrWhiteSpace(destinationPath))
-                            {
-                                throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
-                            }
 
-                            destinationPathOption = option;
-                        }
-                        else if (option.Descriptor.OptionType is CommandLineOptionId.SetConfigLocation)
+                        if (Path.HasExtension(destinationPath) 
+                            && !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
                         {
-                            configuartionOption = option;
+                            throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
                         }
                     }
 
-                    if (destinationPathOption is null)
+                    if (destinationPathOption == default)
                     {
-                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{modeOption.Descriptor.Name} | {modeOption.Descriptor.AlternativeName}' the command requires at least a destination path. The destination path is not optional. Use 'lit --help' to get the comamnd syntax a list of mode options.");
+                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' the command requires at least a destination path. The destination path is not optional. Use 'lit --help' to get the comamnd syntax a list of mode options.");
                     }
 
                     if (command.HasAlias)
                     {
-                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{modeOption.Descriptor.Name} | {modeOption.Descriptor.AlternativeName}' the command cann't specify an alias. Use 'lit --help' to get the comamnd syntax.");
+                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' the command cann't specify an alias. Use 'lit --help' to get the comamnd syntax.");
                     }
 
                     break;
             }
-        }
-            if (command.HasMode)
-        {
-            CommandLineOption modeOption;
-            try
-            {
-                modeOption = command.Arguments.OptionsTable.Single(option => option.Descriptor.Kind is CommandLineOptionKind.Mode);
-
-            }
-            catch (InvalidOperationException ex)
-            {
-                throw new InvalidCommandArgumentException("Invalid command argument. A command can only have a single mode option. Use 'lit --help' to get a list of mode options.", ex);
-            }
-
-            
         }
     }
 }

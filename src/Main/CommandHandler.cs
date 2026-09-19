@@ -10,6 +10,7 @@ using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
+using Microsoft.VisualBasic.FileIO;
 using YamlDotNet.Core.Tokens;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -96,12 +97,33 @@ internal static class CommandHandler
         string optionsSeparator = ", ";
         int optionsSeparatorLength = optionsSeparator.Length;
         int maxOptionLength = availableOptions.Max(option => option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength);
+        int maxKindLength = availableOptions.Max(option => option.Kind.ToDisplayString().Length);
+        int maxDescriptionLength = availableOptions.Max(option => option.Description.Length);
+
+        string nameColumnName = "Option";
+        string kindColumnName = "Option Type";
+        string descriptionColumnName = "Description";
+        int cell2Padding = maxOptionLength - nameColumnName.Length + Padding;
+        int cell3Padding = maxKindLength - kindColumnName.Length + Padding;
+        _ = messageBuilder.Append(' ', LineIndentation)
+            .Append(nameColumnName)
+            .Append(' ', cell2Padding)
+            .Append(kindColumnName)
+            .Append(' ', cell3Padding)
+            .AppendLine(descriptionColumnName)
+            .Append(' ', LineIndentation)
+            .Append('-', maxOptionLength + maxKindLength + maxDescriptionLength)
+            .AppendLine();
+
         foreach (CommandLineOptionDescriptor option in availableOptions.OrderBy(o => o.Name))
         {
-            int padding = maxOptionLength - (option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength) + Padding;
+            cell2Padding = maxOptionLength - (option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength) + Padding;
+            cell3Padding = maxKindLength - option.Kind.ToDisplayString().Length + Padding;
             _ = messageBuilder.Append(' ', LineIndentation)
                 .AppendJoin(optionsSeparator, option.Name, option.AlternativeName)
-                .Append(' ', padding)
+                .Append(' ', cell2Padding)
+                .Append(option.Kind.ToDisplayString())
+                .Append(' ', cell3Padding)
                 .AppendLine(option.Description);
         }
 
@@ -112,11 +134,19 @@ internal static class CommandHandler
     {
         _ = messageBuilder.AppendLine("Usage:")
             .Append(' ', LineIndentation)
-            .AppendLine(@"lt [alias] [options...] [""<location>""]")
-            .AppendLine()
-            .AppendLine("Aliases:");
+            .AppendLine(@"lit [<alias>] [<options>...]")
+            .Append(' ', LineIndentation)
+            .AppendLine(@"lit (-c | --config) [(-s | --source) <source-path>] (-d | --destination) <destination-path>)")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(@"[(-s | --source) <source-path>]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(@"(-d | --destination) <destination-path>)")
+            .AppendLine();
 
-        _ = messageBuilder.Append(' ', LineIndentation)
+        _ = messageBuilder.AppendLine("Aliases:")
+            .Append(' ', LineIndentation)
             .AppendLine("Note: If no alias is provided, the default alias")
             .Append(' ', LineIndentation)
             .AppendLine("as specified in the YAML configuration file will be used.")
@@ -142,6 +172,7 @@ internal static class CommandHandler
 
         return messageBuilder.AppendLine()
             .Append(' ', LineIndentation)
+            // TODO::Make path point to configured location!!!
             .AppendLine(@">> Edit the ""Config/config.yaml"" file to manage aliases.");
     }
 
