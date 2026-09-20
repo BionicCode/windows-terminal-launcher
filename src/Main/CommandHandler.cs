@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Drawing;
+using System.IO;
+using System.Security;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
@@ -57,11 +59,11 @@ internal static class CommandHandler
         using Process? process = Process.Start(startInfo);
     }
 
-    public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable)
+    public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
-        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
+        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(userConfigurationFilePath);
         var helpMessageBuilder = new StringBuilder();
         helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
         helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
@@ -69,9 +71,9 @@ internal static class CommandHandler
         ShowInfoDialog(helpMessageBuilder);
     }
 
-    public static async Task ShowAliasesAsync()
+    public static async Task ShowAliasesAsync(string userConfigurationFilePath)
     {
-        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
+        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(userConfigurationFilePath);
         var helpMessageBuilder = new StringBuilder();
         helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
 
@@ -220,23 +222,119 @@ internal static class CommandHandler
         dialog.Show();
     }
 
-    internal static async Task HandleMode(CommandLineCommand command)
+    internal static async Task HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
     {
-        CommandLineOptionId commandMode = command.Arguments.OptionsTable
-            .Single(option => option.Descriptor.Kind is CommandLineOptionKind.Mode)
-            .Descriptor.OptionType;
-        switch (commandMode)
+        ArgumentNullException.ThrowIfNull(applicationSettings);
+
+        switch (command.Mode)
         {
-            case CommandLineOptionId.SetConfigLocation:
-                SetConfigLocationAsync(command.Arguments.OptionsTable);
+            case CommandLineOptionId.GetOrSetConfigLocation:
+                _ = applicationSettings.TryGet(AppSettingsKeys.UserConfigFileLocationKey, out string currentConfigFilePath);
+
+                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
+                {
+                    string message = string.IsNullOrWhiteSpace(currentConfigFilePath)
+                        ? "No location set. Please set a location first. See '--help' or '-h'."
+                        : currentConfigFilePath;
+
+                    var dialog = new InfoDialog
+                    {
+                        Title = "lit.exe user configuration file location",
+                        Header = "The user configuration YAML file is located at:",
+                        Body = message,
+                        Icon = Imaging.CreateBitmapSourceFromHIcon(
+                            SystemIcons.Information.Handle,
+                            Int32Rect.Empty,
+                            BitmapSizeOptions.FromEmptyOptions())
+                    };
+
+                    dialog.Show();
+                }
+                else
+                {
+                    string destinationPath = string.Empty;
+                    string destinationFileName = string.Empty;
+                    string sourcePath = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption option)
+                        ? option.Value
+                        : currentConfigFilePath;
+
+                    if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out option))
+                    {
+                        destinationPath = option.Value;
+
+                        destinationFileName = Path.GetFileName(destinationPath);
+                        bool isDestinationFileNameProvided = !string.IsNullOrWhiteSpace(destinationFileName);
+                        if (!isDestinationFileNameProvided)
+                        {
+                            string sourceFileName = Path.GetFileName(sourcePath);
+                            destinationPath = Path.Combine(destinationPath, sourceFileName);
+                        }
+                    }
+
+                    if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return;
+                    }
+
+                    if (File.Exists(destinationPath))
+                    {
+                        var dialog = new InteractionDialog
+                        {
+                            Title = "File exists",
+                            Header = "File Exists:",
+                            Body = $"The file '{destinationFileName}' already exists. Overwrite the existing file?",
+                            Icon = Imaging.CreateBitmapSourceFromHIcon(
+                                SystemIcons.Warning.Handle,
+                                Int32Rect.Empty,
+                                BitmapSizeOptions.FromEmptyOptions())
+                        };
+
+                        bool? dialogResult = dialog.ShowDialog();
+                        if (dialogResult == false)
+                        {
+                            return;
+                        }
+                    }
+
+                    SetConfigLocationAsync(sourcePath, destinationPath);
+                    applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, destinationPath);
+                }
+
                 break;
             default:
-                break;
+                throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
         }
     }
 
-    private static void SetConfigLocationAsync(ImmutableHashSet<CommandLineOption> options)
+    private static void SetConfigLocationAsync(string sourcePath, string destinationPath)
     {
-        throw new NotImplementedException();
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+
+        try
+        {
+            File.Copy(sourcePath, destinationPath, true);
+        }
+        catch (Exception ex) when (ex
+            is UnauthorizedAccessException
+            or PathTooLongException
+            or SecurityException
+            or IOException
+            or DirectoryNotFoundException)
+        {
+            var dialog = new InfoDialog
+            {
+                Title = "lit.exe Error",
+                Header = "The copy operation failed:",
+                Body = ex.Message,
+                Icon = Imaging.CreateBitmapSourceFromHIcon(
+                    SystemIcons.Information.Handle,
+                    Int32Rect.Empty,
+                    BitmapSizeOptions.FromEmptyOptions())
+            };
+
+            dialog.Show();
+            return;
+        }
     }
 }

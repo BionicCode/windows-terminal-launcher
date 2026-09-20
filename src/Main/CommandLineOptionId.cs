@@ -7,7 +7,8 @@ internal enum CommandLineOptionId
     Version,
     ListAliases,
     RunAsAdmin,
-    SetConfigLocation,
+    GetOrSetConfigLocation,
     SourcePath,
-    DestinationPath
+    DestinationPath,
+    Print
 }

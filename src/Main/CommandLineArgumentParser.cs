@@ -17,7 +17,10 @@ internal static class CommandLineArgumentParser
     /// <returns>A <see cref="CommandLineCommand"/> object containing the parsed command arguments like Windows Terminal profile alias and command options.</returns>
     /// <exception cref="InvalidCommandArgumentException">Thrown when an invalid command argument is encountered.</exception>
     /// <remarks>Expects a command syntax of the form: <c>lit [alias] [options...]</c></remarks>
-    public async static Task<CommandLineCommand> CreateCommandAsync(string[]? rawArguments, IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptions)
+    public async static Task<CommandLineCommand> CreateCommandAsync(
+        string[]? rawArguments, 
+        IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptions, 
+        string configFilePath)
     {
         ArgumentNullException.ThrowIfNull(rawArguments);
         ArgumentNullException.ThrowIfNull(validOptions);
@@ -77,7 +80,7 @@ internal static class CommandLineArgumentParser
         }
 
         var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
-        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync();
+        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(configFilePath);
         Alias alias = await AliasResolver.CreateAliasAsync(aliasKey, configuration);
         CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
         var arguments = new CommandArguments(alias, immutableOptionsTable);

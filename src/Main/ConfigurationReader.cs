@@ -9,9 +9,6 @@ using YamlDotNet.Serialization.NamingConventions;
 
 internal static class ConfigurationReader
 {
-    private const string ConfigYamlFileName = @"config.yaml";
-    private static readonly string s_relativeConfigYamlFilePath = Path.Combine("Config", ConfigYamlFileName);
-    private static readonly string s_configFilePath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, s_relativeConfigYamlFilePath);
     private static readonly FileStreamOptions s_fileStreamOptions = new FileStreamOptions
     {
         Mode = FileMode.Open,
@@ -20,7 +17,7 @@ internal static class ConfigurationReader
         Options = FileOptions.Asynchronous | FileOptions.SequentialScan
     };
 
-    public static async Task<Configuration> ReadConfigurationAsync()
+    public static async Task<Configuration> ReadConfigurationAsync(string configFilePath)
     {
         if (!File.Exists(s_configFilePath))
         {

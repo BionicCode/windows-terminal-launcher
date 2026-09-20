@@ -1,0 +1,56 @@
+﻿<Window x:Class="Main.InteractionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Main"
+        mc:Ignorable="d"
+        Title="InteractionDialog" Height="450" Width="800">
+    <Grid>
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      Padding="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="{Binding Header}"
+                           FontSize="24"
+                           FontWeight="Bold"
+                           HorizontalAlignment="Center"
+                           Margin="10" />
+                <TextBox Text="{Binding Body}"
+                         FontSize="16"
+                         TextWrapping="Wrap"
+                         IsReadOnly="True"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         IsTabStop="False"
+                         HorizontalAlignment="Center"
+                         Margin="10"
+                         Grid.Row="1" />
+                <StackPanel Orientation="Horizontal"
+                            Grid.Row="2" 
+                            HorizontalAlignment="Right">
+                    <Button Content="Ok"
+                            IsDefault="False"
+                            Command="{x:Static ApplicationCommands.Close}"
+                            HorizontalAlignment="Center"
+                            Margin="10"
+                            Width="75"
+                            Height="25"/>
+                    <Button Content="Cancel"
+                            IsDefault="True"
+                            IsCancel="True"
+                            HorizontalAlignment="Center"
+                            Margin="10"
+                            Width="75"
+                            Height="25" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+    </Grid>
+</Window>

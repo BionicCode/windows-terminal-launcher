@@ -15,50 +15,60 @@ using Microsoft.VisualBasic.FileIO;
 /// </summary>
 public partial class App : Application
 {
-    private static FrozenDictionary<string, CommandLineOptionDescriptor> ValidCommandOptionsTable { get; } 
-        
+    private static FrozenDictionary<string, CommandLineOptionDescriptor> ValidCommandOptionsTable { get; }
+    private const string ConfigYamlFileName = @"config.yaml";
+    private static readonly string s_relativeConfigYamlFilePath = Path.Combine("Config", ConfigYamlFileName);
+    private static readonly string s_configFilePath = Path.Combine(Path.GetDirectoryName(Environment.ProcessPath)!, s_relativeConfigYamlFilePath);
+    private static readonly IApplicationSettings s_applicationSettings = new MicrosoftWindowsStorageSettings();
+
     static App()
     {
         var table = new Dictionary<string, CommandLineOptionDescriptor>();
 
-        var helpOption = new CommandLineOptionDescriptor("--help", "-h", CommandLineOptionId.Help, CommandLineOptionKind.Flag, "Show help e.g. list options and aliases", IsOptional: true);
+        var helpOption = new CommandLineOptionDescriptor("--help", "-h", CommandLineOptionId.Help, CommandLineOptionKind.Flag, "Show help e.g. list options and aliases", "lit --help", IsOptional: true);
         table.Add("-h", helpOption);
         table.Add("--help", helpOption);
 
-        var versionOption = new CommandLineOptionDescriptor("--version", "-v", CommandLineOptionId.Version, CommandLineOptionKind.Flag, "Show tool version", IsOptional: true);
+        var versionOption = new CommandLineOptionDescriptor("--version", "-v", CommandLineOptionId.Version, CommandLineOptionKind.Flag, "Show tool version", "lit --version", IsOptional: true);
         table.Add("-v", versionOption);
         table.Add("--version", versionOption);
 
-        var listAliasesOption = new CommandLineOptionDescriptor("--list", "-l", CommandLineOptionId.ListAliases, CommandLineOptionKind.Flag, "List registered aliases", IsOptional: true);
+        var listAliasesOption = new CommandLineOptionDescriptor("--list", "-l", CommandLineOptionId.ListAliases, CommandLineOptionKind.Flag, "List registered aliases", "lit --list", IsOptional: true);
         table.Add("-l", listAliasesOption);
         table.Add("--list", listAliasesOption);
 
-        var runAsAdminOption = new CommandLineOptionDescriptor("--admin", "-a", CommandLineOptionId.RunAsAdmin, CommandLineOptionKind.Flag, "Run as administrator", IsOptional: true);
+        var runAsAdminOption = new CommandLineOptionDescriptor("--admin", "-a", CommandLineOptionId.RunAsAdmin, CommandLineOptionKind.Flag, "Run as administrator", "lit ps --admin", IsOptional: true);
         table.Add("-a", runAsAdminOption);
         table.Add("--admin", runAsAdminOption);
 
-        var setConfigLocationOption = new CommandLineOptionDescriptor("--config", "-c", CommandLineOptionId.SetConfigLocation, CommandLineOptionKind.Mode, "Set configuration file location", IsOptional: true);
+        var setConfigLocationOption = new CommandLineOptionDescriptor("--config", "-c", CommandLineOptionId.GetOrSetConfigLocation, CommandLineOptionKind.Mode, "Set new or get current configuration file location", @"lit --config --destination ""%USERPROFILE%/.lit""", IsOptional: true);
         table.Add("-c", setConfigLocationOption);
         table.Add("--config", setConfigLocationOption);
 
-        var sourceLocationOption = new CommandLineOptionDescriptor("--source", "-s", CommandLineOptionId.SourcePath, CommandLineOptionKind.Value, "Specifies the source path", IsOptional: true);
+        var sourceLocationOption = new CommandLineOptionDescriptor("--source", "-s", CommandLineOptionId.SourcePath, CommandLineOptionKind.Value, "Specifies the source path", @"lit --config --source ""%TEMP%/config.yaml"" --destination ""%USERPROFILE%/.lit""", IsOptional: true);
         table.Add("-s", sourceLocationOption);
         table.Add("--source", sourceLocationOption);
 
-        var destinationLocationOption = new CommandLineOptionDescriptor("--destination", "-d", CommandLineOptionId.DestinationPath, CommandLineOptionKind.Value, "Specifies the source path", IsOptional: false);
+        var destinationLocationOption = new CommandLineOptionDescriptor("--destination", "-d", CommandLineOptionId.DestinationPath, CommandLineOptionKind.Value, "Specifies the source path", @"lit --config --destination ""%USERPROFILE%/.lit""", IsOptional: false);
         table.Add("-d", destinationLocationOption);
         table.Add("--destination", destinationLocationOption);
+
+        var printOption = new CommandLineOptionDescriptor("--print", "-p", CommandLineOptionId.Print, CommandLineOptionKind.Value, "Prints the specified value", @"lit --config --print", IsOptional: false);
+        table.Add("-p", printOption);
+        table.Add("--print", printOption);
 
         ValidCommandOptionsTable = table.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 
     protected async override void OnStartup(StartupEventArgs e)
     {
+        string userConfigurationFilePath = s_applicationSettings.GetOrSetValue(AppSettingsKeys.UserConfigFileLocationKey, _ => s_configFilePath);
+
         string[] commandArgs = e?.Args ?? [];
         CommandLineCommand command;
         try
         {
-            command = await CommandLineArgumentParser.CreateCommandAsync(commandArgs, ValidCommandOptionsTable);
+            command = await CommandLineArgumentParser.CreateCommandAsync(commandArgs, ValidCommandOptionsTable, userConfigurationFilePath);
         }
         catch (InvalidCommandArgumentException ex)
         {
@@ -71,15 +81,15 @@ public partial class App : Application
         switch (command.Arguments.OptionsTable)
         {
             case var _ when command.HasMode:
-                await CommandHandler.HandleMode(command);
+                await CommandHandler.HandleMode(command, s_applicationSettings);
                 break;
             case var options when options.ContainsKey(CommandLineOptionId.Help):
                 base.OnStartup(e);
-                await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable);
+                await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable, userConfigurationFilePath);
                 break;
             case var options when options.ContainsKey(CommandLineOptionId.ListAliases):
                 base.OnStartup(e);
-                await CommandHandler.ShowAliasesAsync();
+                await CommandHandler.ShowAliasesAsync(userConfigurationFilePath);
                 break;
             default:
                 CommandHandler.LaunchTerminalWithAlias(command);
@@ -107,7 +117,7 @@ internal static class CommandValidator
             CommandLineOption option = entry.Value;
             switch (option.Descriptor.OptionType)
             {
-                case CommandLineOptionId.SetConfigLocation:
+                case CommandLineOptionId.GetOrSetConfigLocation:
                     ThrowIfModeAlreadySet();
 
                     modeOption = option;
@@ -120,8 +130,13 @@ internal static class CommandValidator
                             throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
                         }
 
-                        if (Path.HasExtension(sourcePath)
-                            && !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
+                        if (string.IsNullOrWhiteSpace(Path.GetFileName(sourcePath)))
+                        {
+                            throw new InvalidCommandArgumentException($"Invalid path argument. A source file path must provide the file name of the source.");
+                        }
+
+                        if (!Path.HasExtension(sourcePath)
+                            || !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
                         {
                             throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
                         }

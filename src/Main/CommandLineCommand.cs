@@ -6,6 +6,7 @@ internal readonly record struct CommandLineCommand(CommandArguments Arguments, C
 {
     public bool HasMode => Arguments.HasMode;
     public bool HasAlias => Arguments.HasAlias;
+    public CommandLineOptionId Mode => Arguments.Mode;
 
     public static readonly CommandLineCommand Default = new CommandLineCommand(CommandArguments.Default, CommandContext.Default);
 };
