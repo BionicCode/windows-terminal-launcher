@@ -57,6 +57,34 @@ public partial class App : Application
         table.Add("-p", printOption);
         table.Add("--print", printOption);
 
+        var userScopeOption = new CommandLineOptionDescriptor("--user", "-u", CommandLineOptionId.EnvironmentVariableScopeUser, CommandLineOptionKind.Flag, "Specifies the scope of the environment variable as 'user'", @"lit --variable ""PATH"" --value ""C:\Folder"" --user --join", IsOptional: false);
+        table.Add("-u", userScopeOption);
+        table.Add("--user", userScopeOption);
+
+        var systemScopeOption = new CommandLineOptionDescriptor("--machine", "-m", CommandLineOptionId.EnvironmentVariableScopeMachine, CommandLineOptionKind.Flag, "Specifies the scope of the environment variable as 'system'", @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        table.Add("-m", systemScopeOption);
+        table.Add("--machine", systemScopeOption);
+
+        var variableScopeOption = new CommandLineOptionDescriptor("--variable", "--var", CommandLineOptionId.SetEnvironmentVariable, CommandLineOptionKind.ModeAndValue, "Set or create an environment variable", @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        table.Add("--var", variableScopeOption);
+        table.Add("--variable", variableScopeOption);
+
+        var variableValueOption = new CommandLineOptionDescriptor("--value", "--val", CommandLineOptionId.EnvironmentVariableValue, CommandLineOptionKind.Value, "Specifies the new value of the environment variable", @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        table.Add("--value", variableValueOption);
+        table.Add("--val", variableValueOption);
+
+        var joinWriteModeOption = new CommandLineOptionDescriptor("--join", "-j", CommandLineOptionId.EnvironmentVariableWriteModeJoin, CommandLineOptionKind.Flag, "Specifies that the new value is appended to the existing value", @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        table.Add("-j", joinWriteModeOption);
+        table.Add("--join", joinWriteModeOption);
+
+        var replaceWriteModeOption = new CommandLineOptionDescriptor("--replace", "-r", CommandLineOptionId.EnvironmentVariableWriteModeReplace, CommandLineOptionKind.Flag, "Specifies that the new value replaces the existing value", @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace", IsOptional: false);
+        table.Add("-r", replaceWriteModeOption);
+        table.Add("--replace", replaceWriteModeOption);
+
+        var delimiterOption = new CommandLineOptionDescriptor("--delimiter", "--del", CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, CommandLineOptionKind.Value, $"Specifies the delimiter used to join variable values.{Environment.NewLine}The default is  the path separator ';'", @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace --delimiter "";""", IsOptional: true);
+        table.Add("--del", delimiterOption);
+        table.Add("--delimiter", delimiterOption);
+
         ValidCommandOptionsTable = table.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 

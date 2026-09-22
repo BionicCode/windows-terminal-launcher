@@ -7,8 +7,22 @@ internal enum CommandLineOptionId
     Version,
     ListAliases,
     RunAsAdmin,
+    /// <summary>
+    /// Mode option.
+    /// </summary>
     GetOrSetConfigLocation,
     SourcePath,
     DestinationPath,
+    /// <summary>
+    /// Mode option.
+    /// </summary>
+    SetEnvironmentVariable,
+    EnvironmentVariableName,
+    EnvironmentVariableValue,
+    EnvironmentVariableScopeUser,
+    EnvironmentVariableScopeMachine,
+    EnvironmentVariableWriteModeJoin,
+    EnvironmentVariableWriteModeJoinDelimiter,
+    EnvironmentVariableWriteModeReplace,
     Print
 }

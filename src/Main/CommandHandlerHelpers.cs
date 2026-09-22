@@ -6,8 +6,8 @@ internal static class CommandHandlerHelpers
 {
 
     public static string GetFileNameIfFile(string path) => IsFilePath(path)
-        ? string.Empty
-        : Path.GetFileName(path);
+        ? Path.GetFileName(path)
+        : string.Empty;
 
     public static bool IsFilePath(string path)
     {

@@ -5,14 +5,20 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
 using System.Security;
+using System.Security.AccessControl;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using Microsoft.VisualBasic.FileIO;
+using Microsoft.Win32;
+using Windows.Win32;
+using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 using YamlDotNet.Core.Tokens;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -62,26 +68,71 @@ internal static class CommandHandler
         using Process? process = Process.Start(startInfo);
     }
 
-    public static void ExecutePowerShellScript(CommandLineCommand command, bool isElevated)
+    public static void SetOrGetEnvirnomentVariable(CommandLineCommand command)
     {
-        string directory = Environment.CurrentDirectory;
-
-        var startInfo = new ProcessStartInfo
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableName, out CommandLineOption variableNameOption)
+            && (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeMachine)
+                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeMachine.ToDisplayString(), out EnvironmentVariableTarget environmentVariableTarget)
+            || command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeUser)
+                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeUser.ToDisplayString(), out environmentVariableTarget)))
         {
-            FileName = "pwsh.exe",
-            UseShellExecute = true,
-            Verb = "runas"
-        };
+            string newValue = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableValue, out CommandLineOption variableValueOption)
+                ? variableValueOption.Value
+                : Environment.CurrentDirectory;
 
-        startInfo.ArgumentList.Add("-NoProfile");
-        startInfo.ArgumentList.Add("-NonInteractive");
-        startInfo.ArgumentList.Add("-Command");
-        startInfo.ArgumentList.Add(
-            $"[Environment]::SetEnvironmentVariable('Path'," +
-            $"[Environment]::GetEnvironmentVariable('Path','Machine') + ';{directory.Replace("'", "''")}'," +
-            $"'Machine')");
+            // We have to use the registry here because 'Environment.SetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
+            // But we don't want to erase such variabled i.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
+            using RegistryKey? key = (environmentVariableTarget is EnvironmentVariableTarget.User
+                ? Registry.CurrentUser.OpenSubKey(
+                    "Environment",
+                    RegistryKeyPermissionCheck.Default,
+                    RegistryRights.CreateSubKey | RegistryRights.SetValue | RegistryRights.QueryValues)
+                : Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
+                    RegistryKeyPermissionCheck.Default,
+                    RegistryRights.CreateSubKey | RegistryRights.SetValue | RegistryRights.QueryValues)) 
+                ?? throw new InvalidOperationException("Environment registry key is missing.");
 
-        Process.Start(startInfo);
+            string variableName = variableNameOption.Value;
+            object? rawValue = key.GetValue(
+                variableName,
+                null,
+                RegistryValueOptions.DoNotExpandEnvironmentNames);
+            
+            string currentValue = rawValue as string ?? string.Empty;            
+            if (!string.IsNullOrWhiteSpace(currentValue)
+                && command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
+            {
+                string delimiter = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out CommandLineOption delimiterOption)
+                    ? delimiterOption.Value
+                    : Path.PathSeparator.ToString();
+                newValue = string.Join(delimiter, currentValue, newValue);
+            }
+            
+            RegistryValueKind kind = rawValue is null
+                ? RegistryValueKind.String
+                : key.GetValueKind(variableName);
+            key.SetValue(variableName, newValue, kind);
+
+            BroadcastEnvironmentChange();
+        }
+    }
+
+    private static unsafe void BroadcastEnvironmentChange()
+    {
+        const string environment = "Environment";
+
+        fixed (char* environmentPtr = environment)
+        {
+            _ = PInvoke.SendMessageTimeout(
+                HWND.HWND_BROADCAST,
+                PInvoke.WM_SETTINGCHANGE,
+                0,
+                (nint)environmentPtr,
+                SEND_MESSAGE_TIMEOUT_FLAGS.SMTO_ABORTIFHUNG,
+                5000,
+                null);
+        }
     }
 
     public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
@@ -278,7 +329,7 @@ internal static class CommandHandler
         {
             case CommandLineOptionId.GetOrSetConfigLocation:
                 _ = applicationSettings.TryGet(
-                    AppSettingsKeys.UserConfigFileLocationKey, 
+                    AppSettingsKeys.UserConfigFileLocationKey,
                     out string currentConfigFilePath);
 
                 if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
@@ -302,27 +353,10 @@ internal static class CommandHandler
                 }
                 else
                 {
-                    string sourcePath = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption option)
-                        ? option.Value
-                        : currentConfigFilePath;
+                    _ = TryGetpath(CommandLineOptionId.SourcePath, command, out string sourcePath, currentConfigFilePath);
 
-                    string destinationPath;
-                    string destinationFileName;
-                    if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out option))
-                    {
-                        destinationPath = option.Value;
-                    }
-                    else
-                    {
-                        destinationPath = Environment.CurrentDirectory;
-                    }
-
-                    if (!CommandHandlerHelpers.IsFilePath(destinationPath))
-                    {
-                        string sourceFileName = Path.GetFileName(sourcePath);
-                        destinationPath = Path.Combine(destinationPath, sourceFileName);
-                    }
-
+                    string fallbackFileName = CommandHandlerHelpers.GetFileNameIfFile(sourcePath);
+                    _ = TryGetpath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory,  fallbackFileName);
                     if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
                     {
                         return;
@@ -353,9 +387,44 @@ internal static class CommandHandler
                 }
 
                 break;
+            case CommandLineOptionId.SetEnvironmentVariable:
+                SetOrGetEnvirnomentVariable(command);
+                break;
             default:
                 throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
         }
+    }
+
+    private static bool TryGetpath(
+        CommandLineOptionId pathId, 
+        CommandLineCommand command, 
+        [NotNullWhen(true)] out string path, 
+        string? fallbackPath = null, 
+        string? fileName = null)
+    {
+        if (pathId is not CommandLineOptionId.SourcePath and not CommandLineOptionId.DestinationPath)
+        {
+            throw new ArgumentException($"Provided option ID '{Enum.GetName(pathId)}' is n ot a path ID.");
+        }
+
+        path = string.Empty;
+        if (command.Arguments.OptionsTable.TryGetValue(pathId, out CommandLineOption option))
+        {
+            path = option.Value;
+        }
+        else if (!string.IsNullOrWhiteSpace(fallbackPath))
+        {
+            path = fallbackPath;
+        }
+
+        if (string.IsNullOrWhiteSpace(path)
+            && !CommandHandlerHelpers.IsFilePath(path)
+            && !string.IsNullOrWhiteSpace(fileName))
+        {
+            path = Path.Combine(path, fileName);
+        }
+
+        return !string.IsNullOrWhiteSpace(path);
     }
 
     private static void SetConfigLocationAsync(string sourcePath, string destinationPath)

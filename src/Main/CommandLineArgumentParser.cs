@@ -45,7 +45,7 @@ internal static class CommandLineArgumentParser
                         throw new InvalidCommandArgumentException($"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
                     }
 
-                    string value = optionDescriptor.Kind is CommandLineOptionKind.Value
+                    string value = optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue
                         ? rawArguments[++index]
                         : string.Empty;
 
