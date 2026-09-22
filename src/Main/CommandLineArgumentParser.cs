@@ -25,65 +25,64 @@ internal static class CommandLineArgumentParser
         ArgumentNullException.ThrowIfNull(rawArguments);
         ArgumentNullException.ThrowIfNull(validOptions);
 
-        string aliasKey = string.Empty;
-        if (rawArguments.Length == 0)
-        {
-            CommandLineCommand defaultCommand = CreateDefaultCommand();
-            return defaultCommand;
-        }
-
         var options = new Dictionary<CommandLineOptionId, CommandLineOption>(CommandLineOptionIdComparer.Instance);
-        for (int index = 0; index < rawArguments.Length; index++)
+        string providedTerminalProfile = string.Empty;
+        if (rawArguments.Length > 0)
         {
-            string arg = rawArguments[index];
-            if (string.IsNullOrWhiteSpace(arg))
+            for (int index = 0; index < rawArguments.Length; index++)
             {
-                continue;
-            }
-
-            // Must be an option if it starts with a dash
-            if (arg.StartsWith('-'))
-            {
-                if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
+                string arg = rawArguments[index];
+                if (string.IsNullOrWhiteSpace(arg))
                 {
-                    throw new InvalidCommandArgumentException($"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
+                    continue;
                 }
 
-                string value = optionDescriptor.Kind is CommandLineOptionKind.Value
-                    ? rawArguments[++index]
-                    : string.Empty;
-
-                if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath)
+                // Must be an option if it starts with a dash
+                if (arg.StartsWith('-'))
                 {
-                    if (!TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                    if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
                     {
-                        throw new InvalidCommandArgumentException($"Invalid source path argument at argument index '{index}'. The path is malformed.");
+                        throw new InvalidCommandArgumentException($"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
                     }
 
-                    value = normalizedSourcePath;
-                }
+                    string value = optionDescriptor.Kind is CommandLineOptionKind.Value
+                        ? rawArguments[++index]
+                        : string.Empty;
 
-                var option = new CommandLineOption(optionDescriptor, value);
-                options.Add(optionDescriptor.OptionType, option);
-            }
-            else
-            {
-                // Only one alias can be specified, so if we already have an alias, throw an exception
-                if (!string.IsNullOrEmpty(aliasKey))
+                    if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath)
+                    {
+                        if (!TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                        {
+                            throw new InvalidCommandArgumentException($"Invalid source path argument at argument index '{index}'. The path is malformed.");
+                        }
+
+                        value = normalizedSourcePath;
+                    }
+
+                    var option = new CommandLineOption(optionDescriptor, value);
+                    options.Add(optionDescriptor.OptionType, option);
+                }
+                else
                 {
-                    throw new InvalidCommandArgumentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
+                    // Only one alias can be specified, so if we already have an alias, throw an exception
+                    if (!string.IsNullOrEmpty(providedTerminalProfile))
+                    {
+                        throw new InvalidCommandArgumentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
+                    }
+
+                    providedTerminalProfile = arg;
+
                 }
-
-                aliasKey = arg;
-
             }
         }
 
         var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
         Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(configFilePath);
-        Alias alias = await AliasResolver.CreateAliasAsync(aliasKey, configuration);
+        TerminalProfile providedProfile = await AliasResolver.CreateAliasAsync(providedTerminalProfile, configuration);
+        TerminalProfile defaultProfile = await AliasResolver.CreateAliasAsync(configuration.DefaultProfileValue, configuration);
         CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
-        var arguments = new CommandArguments(alias, immutableOptionsTable);
+        var arguments = new CommandArguments(providedProfile, defaultProfile, immutableOptionsTable);
+        
         return new CommandLineCommand(arguments, context);
     }
 
@@ -103,7 +102,7 @@ internal static class CommandLineArgumentParser
         {
             string fullPath = Path.GetFullPath(path);
 
-            if (!HasValidWindowsPathComponents(fullPath))
+            if (!IsLexicallyValidPath(fullPath))
             {
                 return false;
             }
@@ -123,19 +122,6 @@ internal static class CommandLineArgumentParser
         {
             return false;
         }
-    }
-
-    private static bool IsPathArgument(string arg)
-    {
-        if (string.IsNullOrWhiteSpace(arg))
-        {
-            return false;
-        }
-
-        bool isPathCandidate = arg.StartsWith('"') && arg.EndsWith('"')
-            || arg.StartsWith('\'') && arg.EndsWith('\'');
-
-        return isPathCandidate && IsLexicallyValidPath(arg);
     }
 
     private static bool IsLexicallyValidPath(string path)
@@ -161,21 +147,12 @@ internal static class CommandLineArgumentParser
         return true;
     }
 
-    private static CommandLineCommand CreateDefaultCommand()
-    {
-        Alias defaultAlias = AliasResolver.CreateDefaultAlias();
-        CommandArguments defaultArguments = CommandArguments.Default with { Alias = defaultAlias };
-        CommandContext defaultContext = CommandContext.Default;
-
-        return new CommandLineCommand(defaultArguments, defaultContext);
-    }
-
     private static CommandContext CreateCommandContext(Configuration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)
     {
         ExecutionMode executionMode = options.ContainsKey(CommandLineOptionId.RunAsAdmin) 
             ? ExecutionMode.Admin 
             : ExecutionMode.Normal;
-        string launchMode = configuration.ReuseTerminalWindow 
+        string launchMode = configuration.IsReuseTerminalWindowEnabled 
             ? LaunchModes.LastActiveWindow 
             : LaunchModes.NewWindow;
 

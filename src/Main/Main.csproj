@@ -2,15 +2,29 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <StartupObject>Main.App</StartupObject>
     <AssemblyName>lit</AssemblyName>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <SupportedOSPlatformVersion>7.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.26100.0</SupportedOSPlatformVersion>
+    <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
+    <Target Name="DeployBuildOutput" AfterTargets="Build">
+        <PropertyGroup>
+            <DeployDirectory>I:\GitHubRepositories\WindowsTerminalLauncher\artifacts\deploy\</DeployDirectory>
+        </PropertyGroup>
+
+        <ItemGroup>
+            <DeployFiles Include="$(TargetDir)**\*" />
+        </ItemGroup>
+
+        <MakeDir Directories="$(DeployDirectory)" />
+
+        <Copy SourceFiles="@(DeployFiles)" DestinationFiles="@(DeployFiles->'$(DeployDirectory)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+    </Target>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <DebugType>full</DebugType>

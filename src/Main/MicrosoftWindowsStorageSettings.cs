@@ -11,15 +11,19 @@ internal class MicrosoftWindowsStorageSettings : IApplicationSettings
 
     private static readonly object s_syncRoot = new();
 
-    public TValue GetOrSetValue<TValue>(AppSettingsEntryDescriptor<TValue> settingsKeyDescriptor, Func<AppSettingsEntryDescriptor<TValue>, TValue?> valueFactory)
-        where TValue : notnull
+    public TValue GetOrUpdateValue<TValue>(
+        AppSettingsEntryDescriptor<TValue> settingsKeyDescriptor, 
+        Func<AppSettingsEntryDescriptor<TValue>, TValue?> valueFactory, 
+        Func<TValue, bool> updateCondition) where TValue : notnull
     {
         ArgumentNullException.ThrowIfNull(settingsKeyDescriptor);
         ArgumentNullException.ThrowIfNull(valueFactory);
+        ArgumentNullException.ThrowIfNull(updateCondition);
 
         lock (s_syncRoot)
         {
-            if (!s_settings.Values.TryGetValue(settingsKeyDescriptor.Key, out object? value))
+            if (!s_settings.Values.TryGetValue(settingsKeyDescriptor.Key, out object? value) 
+                || updateCondition.Invoke((TValue)value))
             {
                 // Produce new value
                 value = valueFactory.Invoke(settingsKeyDescriptor) ?? throw new InvalidOperationException($"The argument '{nameof(valueFactory)}' must not return NULL.");
@@ -31,14 +35,20 @@ internal class MicrosoftWindowsStorageSettings : IApplicationSettings
                         $"'{typeof(TValue).FullName}' was requested.");
                 }
 
-                if (!s_settings.Values.TryAdd(settingsKeyDescriptor.Key, typedValue))
-                {
-                    throw new InvalidOperationException("Application initializuation error. Unable to configure application settings");
-                }
+                s_settings.Values[settingsKeyDescriptor.Key] = typedValue;
             }
 
             return (TValue)value;
         }
+    }
+
+    public TValue GetOrSetValue<TValue>(AppSettingsEntryDescriptor<TValue> settingsKeyDescriptor, Func<AppSettingsEntryDescriptor<TValue>, TValue?> valueFactory)
+        where TValue : notnull
+    {
+        ArgumentNullException.ThrowIfNull(settingsKeyDescriptor);
+        ArgumentNullException.ThrowIfNull(valueFactory);
+
+        return GetOrUpdateValue(settingsKeyDescriptor, valueFactory, _ => true);
     }
 
     public bool TryAdd<TValue>(AppSettingsEntryDescriptor<TValue> settingsKeyDescriptor, TValue value)

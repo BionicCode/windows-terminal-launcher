@@ -3,7 +3,8 @@
 using System.Collections.Immutable;
 
 internal record Configuration(
-    ImmutableHashSet<Alias> Aliases, 
-    ImmutableDictionary<string, Alias> AliasMap, 
-    string DefaultAlias, 
-    bool ReuseTerminalWindow);
+    ImmutableHashSet<TerminalProfile> TerminalProfiles, 
+    ImmutableDictionary<string, TerminalProfile> TerminalProfileMap, 
+    string DefaultProfileValue, 
+    bool IsReuseTerminalWindowEnabled,
+    string Location);

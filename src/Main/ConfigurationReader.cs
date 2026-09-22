@@ -19,12 +19,12 @@ internal static class ConfigurationReader
 
     public static async Task<Configuration> ReadConfigurationAsync(string configFilePath)
     {
-        if (!File.Exists(s_configFilePath))
+        if (!File.Exists(configFilePath))
         {
-            throw new FileNotFoundException($"Configuration file '{ConfigYamlFileName}' not found at location '{s_configFilePath}'.");
+            throw new FileNotFoundException($"Configuration file not found at location '{configFilePath}'.");
         }
 
-        await using var configFile = new FileStream(s_configFilePath, s_fileStreamOptions);
+        await using var configFile = new FileStream(configFilePath, s_fileStreamOptions);
         using var reader = new StreamReader(configFile, Encoding.UTF8);
         string yamlContent = await reader.ReadToEndAsync();
         IDeserializer deserializer = new DeserializerBuilder()
@@ -39,20 +39,21 @@ internal static class ConfigurationReader
         YamlConfiguration yamlConfiguration = await Task.Run(() => deserializer.Deserialize<YamlConfiguration>(yamlContent))
             .ConfigureAwait(true);
         
-        return CreateConfiguration(yamlConfiguration);
+        return CreateConfiguration(yamlConfiguration, configFilePath);
     }
 
-    private static Configuration CreateConfiguration(YamlConfiguration yamlConfiguration)
+    private static Configuration CreateConfiguration(YamlConfiguration yamlConfiguration, string configFilePath)
     {
-        string defaultAlias = yamlConfiguration.DefaultAlias ?? string.Empty;
+        string defaultProfileValue = yamlConfiguration.DefaultTerminalProfile ?? string.Empty;
         var aliases = yamlConfiguration.TerminalProfiles
             .Where(kvp => !string.IsNullOrWhiteSpace(kvp.Key) && !string.IsNullOrWhiteSpace(kvp.Value))
-            .Select(kvp => new Alias(kvp.Key, kvp.Value, IsDefault: StringComparer.OrdinalIgnoreCase.Equals(kvp.Key, defaultAlias)))
+            .Select(kvp => new TerminalProfile(kvp.Key, kvp.Value, IsDefault: StringComparer.OrdinalIgnoreCase.Equals(kvp.Key, defaultProfileValue) || StringComparer.OrdinalIgnoreCase.Equals(kvp.Value, defaultProfileValue)))
             .ToImmutableHashSet();
         return new Configuration(
             aliases, 
-            aliases.ToImmutableDictionary(alias => alias.Name, alias => alias),
-            defaultAlias, 
-            yamlConfiguration.ReuseTerminalWindow);
+            aliases.ToImmutableDictionary(ptofile => ptofile.Alias, alias => alias),
+            defaultProfileValue, 
+            yamlConfiguration.ReuseTerminalWindow,
+            configFilePath);
     }
 }

@@ -2,45 +2,33 @@
 
 internal static class AliasResolver
 {
-    public static async Task<Alias> CreateAliasAsync(string aliasKey, Configuration configuration)
+    public static async Task<TerminalProfile> CreateAliasAsync(string aliasToResolve, Configuration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 
-        bool isUsingDefaultAlias = false;
-
-        Alias? resolvedAlias;
-        if (aliasKey is not null && aliasKey.StartsWith('"') && aliasKey.EndsWith('"'))
+        TerminalProfile? resolvedProfile;
+        if (string.IsNullOrWhiteSpace(aliasToResolve))
         {
-            string resolvedName = aliasKey[1..^1];
-            resolvedAlias = new Alias(resolvedName, resolvedName, false);
-
-            return resolvedAlias;
-        }
-
-        if (string.IsNullOrWhiteSpace(aliasKey))
-        {
-            aliasKey = configuration.DefaultAlias;
-            isUsingDefaultAlias = true;
-        }
-
-        if (string.IsNullOrWhiteSpace(aliasKey))
-        {
-            resolvedAlias = CreateDefaultAlias();
+            resolvedProfile = CreateDefaultAlias();
         }
         else
         {
-            if (!configuration.AliasMap.TryGetValue(aliasKey, out resolvedAlias))
+            if (!configuration.TerminalProfileMap.TryGetValue(aliasToResolve, out resolvedProfile))
             {
-                string message = isUsingDefaultAlias
-                    ? $"The default alias '{aliasKey}' provided in the configuration YAML file is not defined."
-                    : $"The provided alias '{aliasKey}' is not defined in the configuration YAML file.";
-
-                throw new InvalidCommandArgumentException(message);
+                // The provided token is obviiously not the alias but maybe the full profile name instead
+                resolvedProfile = configuration.TerminalProfileMap.
+                    Select(entry => entry.Value)
+                    .FirstOrDefault(terminalProfile => terminalProfile.Name.Equals(aliasToResolve, StringComparison.OrdinalIgnoreCase));
+                if (resolvedProfile is null)
+                { 
+                    string message = $"The provided alias '{aliasToResolve}' is not defined in the configuration YAML file.";
+                    throw new InvalidCommandArgumentException(message);
+                }
             }
         }
 
-        return resolvedAlias!;
+        return resolvedProfile!;
     }
 
-    public static Alias CreateDefaultAlias() => new(string.Empty, string.Empty, true);
+    public static TerminalProfile CreateDefaultAlias() => new(string.Empty, string.Empty, true);
 }

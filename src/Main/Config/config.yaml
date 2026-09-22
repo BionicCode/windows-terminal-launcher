@@ -18,9 +18,9 @@ TerminalProfiles:
   gb: Git Bash
   cmd: Command Prompt
 
-# The default alias to use when launching Windows Terminal without specifying a profile.
+# The default alias or plain terminal profile name to use when launching Windows Terminal without specifying a profile.
 # If not specified or the following line is removed, the default Windows Terminal profile will be used.
-DefaultAlias: ps
+DefaultTerminalProfile: ps
 
 # Launch the Windows Terminal profile in the existing window instead of a new window.
 ReuseTerminalWindow: true

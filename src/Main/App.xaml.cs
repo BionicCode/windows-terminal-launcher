@@ -49,11 +49,11 @@ public partial class App : Application
         table.Add("-s", sourceLocationOption);
         table.Add("--source", sourceLocationOption);
 
-        var destinationLocationOption = new CommandLineOptionDescriptor("--destination", "-d", CommandLineOptionId.DestinationPath, CommandLineOptionKind.Value, "Specifies the source path", @"lit --config --destination ""%USERPROFILE%/.lit""", IsOptional: false);
+        var destinationLocationOption = new CommandLineOptionDescriptor("--destination", "-d", CommandLineOptionId.DestinationPath, CommandLineOptionKind.Value, "Specifies the source path", @"lit --config --destination ""%USERPROFILE%/.lit""", IsOptional: true);
         table.Add("-d", destinationLocationOption);
         table.Add("--destination", destinationLocationOption);
 
-        var printOption = new CommandLineOptionDescriptor("--print", "-p", CommandLineOptionId.Print, CommandLineOptionKind.Value, "Prints the specified value", @"lit --config --print", IsOptional: false);
+        var printOption = new CommandLineOptionDescriptor("--print", "-p", CommandLineOptionId.Print, CommandLineOptionKind.Flag, "Prints the specified value", @"lit --config --print", IsOptional: false);
         table.Add("-p", printOption);
         table.Add("--print", printOption);
 
@@ -62,7 +62,10 @@ public partial class App : Application
 
     protected async override void OnStartup(StartupEventArgs e)
     {
-        string userConfigurationFilePath = s_applicationSettings.GetOrSetValue(AppSettingsKeys.UserConfigFileLocationKey, _ => s_configFilePath);
+        string userConfigurationFilePath = s_applicationSettings.GetOrUpdateValue(
+            AppSettingsKeys.UserConfigFileLocationKey, 
+            _ => s_configFilePath,
+            configPath => !File.Exists(configPath));
 
         string[] commandArgs = e?.Args ?? [];
         CommandLineCommand command;
@@ -121,16 +124,22 @@ internal static class CommandValidator
                     ThrowIfModeAlreadySet();
 
                     modeOption = option;
+                    bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out CommandLineOption printOption);
                     CommandLineOption destinationPathOption = default;
                     if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption sourcePathOption))
                     {
+                        if (isPrintOptionProvided)
+                        {
+                            throw new InvalidCommandArgumentException($"Invalid command argument. Providing the '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option together with the '{printOption.Descriptor.Name} | {printOption.Descriptor.AlternativeName}' is not allowed. Use 'lit --help' to get the comamnd syntax.");
+                        }
+
                         string sourcePath = sourcePathOption.Value;
                         if (string.IsNullOrWhiteSpace(sourcePath))
                         {
                             throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
                         }
 
-                        if (string.IsNullOrWhiteSpace(Path.GetFileName(sourcePath)))
+                        if (!CommandHandlerHelpers.IsFilePath(sourcePath))
                         {
                             throw new InvalidCommandArgumentException($"Invalid path argument. A source file path must provide the file name of the source.");
                         }
@@ -143,22 +152,25 @@ internal static class CommandValidator
                     }
                     else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out destinationPathOption))
                     {
+                        if (isPrintOptionProvided)
+                        {
+                            throw new InvalidCommandArgumentException($"Invalid command argument. Providing the '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option together with the '{printOption.Descriptor.Name} | {printOption.Descriptor.AlternativeName}' is not allowed. Use 'lit --help' to get the comamnd syntax.");
+                        }
+
                         string destinationPath = option.Value;
                         if (string.IsNullOrWhiteSpace(destinationPath))
                         {
                             throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
                         }
 
-                        if (Path.HasExtension(destinationPath) 
-                            && !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
+                        // Only validate extension if the path is a file path.
+                        // Otherwise allow the destination to be a directory.
+                        if (CommandHandlerHelpers.IsFilePath(destinationPath)
+                            && !Path.HasExtension(destinationPath) 
+                            || !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
                         {
                             throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
                         }
-                    }
-
-                    if (destinationPathOption == default)
-                    {
-                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' the command requires at least a destination path. The destination path is not optional. Use 'lit --help' to get the comamnd syntax a list of mode options.");
                     }
 
                     if (command.HasAlias)

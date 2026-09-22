@@ -43,11 +43,14 @@ internal static class CommandHandler
         startInfo.ArgumentList.Add(targetWindow);
 
         // Control terminal profile. If ommitted, wt.exe uses the default profile.
-        bool isProfileSpecified = !string.IsNullOrWhiteSpace(command.Arguments.Alias.ResolvedName);
+        string selectedTerminalProfile = command.Arguments.TerminalProfile.HasName
+            ? command.Arguments.TerminalProfile.Name
+            : command.Arguments.DefaultTerminalProfile.Name;
+        bool isProfileSpecified = !string.IsNullOrWhiteSpace(selectedTerminalProfile);
         if (isProfileSpecified)
         {
             startInfo.ArgumentList.Add("-p");
-            startInfo.ArgumentList.Add(command.Arguments.Alias.ResolvedName);
+            startInfo.ArgumentList.Add(command.Arguments.TerminalProfile.Name);
         }
 
         // Control working directory.
@@ -59,12 +62,35 @@ internal static class CommandHandler
         using Process? process = Process.Start(startInfo);
     }
 
+    public static void ExecutePowerShellScript(CommandLineCommand command, bool isElevated)
+    {
+        string directory = Environment.CurrentDirectory;
+
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "pwsh.exe",
+            UseShellExecute = true,
+            Verb = "runas"
+        };
+
+        startInfo.ArgumentList.Add("-NoProfile");
+        startInfo.ArgumentList.Add("-NonInteractive");
+        startInfo.ArgumentList.Add("-Command");
+        startInfo.ArgumentList.Add(
+            $"[Environment]::SetEnvironmentVariable('Path'," +
+            $"[Environment]::GetEnvironmentVariable('Path','Machine') + ';{directory.Replace("'", "''")}'," +
+            $"'Machine')");
+
+        Process.Start(startInfo);
+    }
+
     public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
         Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(userConfigurationFilePath);
         var helpMessageBuilder = new StringBuilder();
+        CreateUsageMessage(helpMessageBuilder);
         helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
         helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
 
@@ -98,7 +124,7 @@ internal static class CommandHandler
         IEnumerable<CommandLineOptionDescriptor> availableOptions = validOptionsTable.Values.Distinct();
         string optionsSeparator = ", ";
         int optionsSeparatorLength = optionsSeparator.Length;
-        int maxOptionLength = availableOptions.Max(option => option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength);
+        int maxOptionLength = availableOptions.Max(option => option.Name.Length + option.AlternativeName.Length) + optionsSeparatorLength;
         int maxKindLength = availableOptions.Max(option => option.Kind.ToDisplayString().Length);
         int maxDescriptionLength = availableOptions.Max(option => option.Description.Length);
 
@@ -114,7 +140,7 @@ internal static class CommandHandler
             .Append(' ', cell3Padding)
             .AppendLine(descriptionColumnName)
             .Append(' ', LineIndentation)
-            .Append('-', maxOptionLength + maxKindLength + maxDescriptionLength)
+            .Append('-', maxOptionLength + maxKindLength + maxDescriptionLength + (2 * Padding))
             .AppendLine();
 
         foreach (CommandLineOptionDescriptor option in availableOptions.OrderBy(o => o.Name))
@@ -134,19 +160,6 @@ internal static class CommandHandler
 
     private static StringBuilder CreateAliasesMessage(Configuration configuration, StringBuilder messageBuilder)
     {
-        _ = messageBuilder.AppendLine("Usage:")
-            .Append(' ', LineIndentation)
-            .AppendLine(@"lit [<alias>] [<options>...]")
-            .Append(' ', LineIndentation)
-            .AppendLine(@"lit (-c | --config) [(-s | --source) <source-path>] (-d | --destination) <destination-path>)")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine(@"[(-s | --source) <source-path>]")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine(@"(-d | --destination) <destination-path>)")
-            .AppendLine();
-
         _ = messageBuilder.AppendLine("Aliases:")
             .Append(' ', LineIndentation)
             .AppendLine("Note: If no alias is provided, the default alias")
@@ -162,20 +175,55 @@ internal static class CommandHandler
             .AppendLine("the alias argument will be ignored.")
             .AppendLine();
 
-        int maxAliasLength = configuration.Aliases.Max(alias => alias.Name.Length);
-        foreach (Alias alias in configuration.Aliases.OrderBy(a => a.Name))
+        int maxAliasLength = configuration.TerminalProfiles.Max(profile => profile.Alias.Length);
+        foreach (TerminalProfile terminalProfile in configuration.TerminalProfiles.OrderBy(profile => profile.Alias))
         {
-            int padding = maxAliasLength - alias.Name.Length + Padding;
+            int padding = maxAliasLength - terminalProfile.Alias.Length + Padding;
             _ = messageBuilder.Append(' ', LineIndentation)
-                .Append(alias.Name)
+                .Append(terminalProfile.Alias)
                 .Append(' ', padding)
-                .AppendLine(alias.ResolvedName);
+                .Append(terminalProfile.Name);
+
+            if (terminalProfile.IsDefault)
+            {
+                _ = messageBuilder.Append(" (default)");
+            }
+
+            _ = messageBuilder.AppendLine();
         }
 
         return messageBuilder.AppendLine()
             .Append(' ', LineIndentation)
             // TODO::Make path point to configured location!!!
-            .AppendLine(@">> Edit the ""Config/config.yaml"" file to manage aliases.");
+            .AppendLine(@">> Edit the user configuration file to manage aliases.")
+            .Append(' ', LineIndentation)
+            .AppendLine(@"   Use 'lit -c -p' to get the location.");
+    }
+
+    private static void CreateUsageMessage(StringBuilder messageBuilder)
+    {
+        _ = messageBuilder.AppendLine("Usage:")
+            .Append(' ', LineIndentation)
+            .AppendLine(@"lit [<alias>] [<options>...]")
+            .Append(' ', LineIndentation)
+            .AppendLine(@"lit (-c | --config) (-p | --print)")
+            .Append(' ', LineIndentation)
+            .AppendLine(@"lit (-c | --config)")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(@"[(-s | --source) <source-path>]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(@"[-d | --destination) <destination-path>]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("==> Note: If '-s' is not provided the current file location will be used.")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("          If '-d' is not provided the current explorer location")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("          (i.e. working directory) will be used.");
     }
 
     public static void ShowError(string message) => ShowErrorDialog(message ?? "An unknown error occurred.");
@@ -183,10 +231,10 @@ internal static class CommandHandler
     private static void ShowInfoDialog(StringBuilder messageBuilder, string title = "lit.exe Help", string header = "lit.exe Command Line Help")
     {
         messageBuilder = new StringBuilder()
-            .AppendLine("This application is a command line utility for launching a Windows Terminal")
-            .AppendLine("tab or instance from the Windows Explorer's address bar with a specified")
-            .AppendLine("Windows Terminal profile. The terminal's working directory is set to the")
-            .AppendLine("path of the currently navigated Windows Explorer folder.")
+            .AppendLine("This application is a command line utility for launching a Windows Terminal tab or")
+            .AppendLine("instance from the Windows Explorer's address bar with a specified Windows Terminal")
+            .AppendLine("profile. The terminal's working directory is set to the path of the currently")
+            .AppendLine("navigated Windows Explorer folder.")
             .AppendLine()
             .AppendLine("For more information, please visit the GitHub repository:")
             .AppendLine("https://github.com/BionicCode/windows-terminal-launcher")
@@ -229,7 +277,9 @@ internal static class CommandHandler
         switch (command.Mode)
         {
             case CommandLineOptionId.GetOrSetConfigLocation:
-                _ = applicationSettings.TryGet(AppSettingsKeys.UserConfigFileLocationKey, out string currentConfigFilePath);
+                _ = applicationSettings.TryGet(
+                    AppSettingsKeys.UserConfigFileLocationKey, 
+                    out string currentConfigFilePath);
 
                 if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
                 {
@@ -252,23 +302,25 @@ internal static class CommandHandler
                 }
                 else
                 {
-                    string destinationPath = string.Empty;
-                    string destinationFileName = string.Empty;
                     string sourcePath = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption option)
                         ? option.Value
                         : currentConfigFilePath;
 
+                    string destinationPath;
+                    string destinationFileName;
                     if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out option))
                     {
                         destinationPath = option.Value;
+                    }
+                    else
+                    {
+                        destinationPath = Environment.CurrentDirectory;
+                    }
 
-                        destinationFileName = Path.GetFileName(destinationPath);
-                        bool isDestinationFileNameProvided = !string.IsNullOrWhiteSpace(destinationFileName);
-                        if (!isDestinationFileNameProvided)
-                        {
-                            string sourceFileName = Path.GetFileName(sourcePath);
-                            destinationPath = Path.Combine(destinationPath, sourceFileName);
-                        }
+                    if (!CommandHandlerHelpers.IsFilePath(destinationPath))
+                    {
+                        string sourceFileName = Path.GetFileName(sourcePath);
+                        destinationPath = Path.Combine(destinationPath, sourceFileName);
                     }
 
                     if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
@@ -282,7 +334,7 @@ internal static class CommandHandler
                         {
                             Title = "File exists",
                             Header = "File Exists:",
-                            Body = $"The file '{destinationFileName}' already exists. Overwrite the existing file?",
+                            Body = $"The file '{destinationPath}'{Environment.NewLine}already exists. Overwrite the existing file?",
                             Icon = Imaging.CreateBitmapSourceFromHIcon(
                                 SystemIcons.Warning.Handle,
                                 Int32Rect.Empty,

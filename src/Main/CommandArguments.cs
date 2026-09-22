@@ -4,14 +4,16 @@ using System.Collections.Immutable;
 using BionicCode.Utilities.Net;
 
 internal readonly record struct CommandArguments(
-    Alias Alias, 
+    TerminalProfile TerminalProfile, 
+    TerminalProfile DefaultTerminalProfile,
     ImmutableDictionary<CommandLineOptionId, CommandLineOption> OptionsTable)
 {
-    public static readonly CommandArguments Default = new CommandArguments(Alias.Default, ImmutableDictionary<CommandLineOptionId, CommandLineOption>.Empty);
+    public static readonly CommandArguments Default = new CommandArguments(TerminalProfile.Default, TerminalProfile.Default, ImmutableDictionary<CommandLineOptionId, CommandLineOption>.Empty);
 
     private readonly WriteOnce<bool> _hasMode = new();
     private readonly WriteOnce<CommandLineOptionId> _mode = new();
-    public bool HasAlias => Alias is not null && !string.IsNullOrWhiteSpace(Alias.ResolvedName);
+    public bool HasAlias => TerminalProfile is not null && !string.IsNullOrWhiteSpace(TerminalProfile.Name);
+    public bool HasDefaultAlias => DefaultTerminalProfile is not null && !string.IsNullOrWhiteSpace(DefaultTerminalProfile.Name);
     public bool HasOptions => OptionsTable is not null && OptionsTable.Count > 0;
     public bool HasMode => _hasMode.IsSet
         ? _hasMode

@@ -23,6 +23,14 @@
     "Error-Option": {
       "commandName": "Project",
       "commandLineArgs": "--hhelp"
+    },
+    "Print-Config-Location": {
+      "commandName": "Project",
+      "commandLineArgs": "--config --print"
+    },
+    "Copy-Config-File": {
+      "commandName": "Project",
+      "commandLineArgs": "--config"
     }
   }
 }

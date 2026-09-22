@@ -8,5 +8,5 @@ internal sealed class YamlConfiguration
 
     public bool ReuseTerminalWindow { get; set; } = true;
 
-    public string? DefaultAlias { get; set; } = string.Empty;
+    public string? DefaultTerminalProfile { get; set; } = string.Empty;
 }
