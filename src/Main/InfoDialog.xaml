@@ -6,7 +6,6 @@
         xmlns:local="clr-namespace:Main"
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="850"
-        SizeToContent="Height"
         DataContext="{Binding RelativeSource={RelativeSource Self}}"
         FontFamily="Consolas">
         <Grid>

@@ -81,7 +81,7 @@ internal static class CommandHandler
                 : Environment.CurrentDirectory;
 
             // We have to use the registry here because 'Environment.SetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
-            // But we don't want to erase such variabled i.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
+            // But we don't want to erase such variabled lineIndex.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
             using RegistryKey? key = (environmentVariableTarget is EnvironmentVariableTarget.User
                 ? Registry.CurrentUser.OpenSubKey(
                     "Environment",
@@ -175,15 +175,17 @@ internal static class CommandHandler
         IEnumerable<CommandLineOptionDescriptor> availableOptions = validOptionsTable.Values.Distinct();
         string optionsSeparator = ", ";
         int optionsSeparatorLength = optionsSeparator.Length;
-        int maxOptionLength = availableOptions.Max(option => option.Name.Length + option.AlternativeName.Length) + optionsSeparatorLength;
-        int maxKindLength = availableOptions.Max(option => option.Kind.ToDisplayString().Length);
-        int maxDescriptionLength = availableOptions.Max(option => option.Description.Length);
+        int maxOptionLength = availableOptions.Max(descriptor => descriptor.Name.Length + (descriptor.HasAlternativeName ? descriptor.AlternativeName.Length + optionsSeparatorLength : 0)) + Padding;
+        int maxKindLength = availableOptions.Max(descriptor => descriptor.Kind.ToDisplayString().Length) + Padding;
+        int maxDescriptionLength = availableOptions
+            .SelectMany(descriptor => descriptor.DescriptionLines)
+            .Max(descriptioLine => descriptioLine.Length);
 
         string nameColumnName = "Option";
         string kindColumnName = "Option Type";
-        string descriptionColumnName = "Description";
-        int cell2Padding = maxOptionLength - nameColumnName.Length + Padding;
-        int cell3Padding = maxKindLength - kindColumnName.Length + Padding;
+        string descriptionColumnName = "DescriptionLines";
+        int cell2Padding = maxOptionLength - nameColumnName.Length;
+        int cell3Padding = maxKindLength - kindColumnName.Length;
         _ = messageBuilder.Append(' ', LineIndentation)
             .Append(nameColumnName)
             .Append(' ', cell2Padding)
@@ -191,19 +193,37 @@ internal static class CommandHandler
             .Append(' ', cell3Padding)
             .AppendLine(descriptionColumnName)
             .Append(' ', LineIndentation)
-            .Append('-', maxOptionLength + maxKindLength + maxDescriptionLength + (2 * Padding))
+            .Append('-', maxOptionLength + maxKindLength + maxDescriptionLength)
             .AppendLine();
 
-        foreach (CommandLineOptionDescriptor option in availableOptions.OrderBy(o => o.Name))
+        foreach (CommandLineOptionDescriptor descriptor in availableOptions.OrderBy(o => o.Name))
         {
-            cell2Padding = maxOptionLength - (option.Name.Length + option.AlternativeName.Length + optionsSeparatorLength) + Padding;
-            cell3Padding = maxKindLength - option.Kind.ToDisplayString().Length + Padding;
-            _ = messageBuilder.Append(' ', LineIndentation)
-                .AppendJoin(optionsSeparator, option.Name, option.AlternativeName)
-                .Append(' ', cell2Padding)
-                .Append(option.Kind.ToDisplayString())
-                .Append(' ', cell3Padding)
-                .AppendLine(option.Description);
+            cell2Padding = maxOptionLength - (descriptor.Name.Length + (descriptor.HasAlternativeName ? descriptor.AlternativeName.Length + optionsSeparatorLength : 0));
+            cell3Padding = maxKindLength - descriptor.Kind.ToDisplayString().Length;
+            _ = messageBuilder.Append(' ', LineIndentation);
+            if (descriptor.HasAlternativeName)
+            { 
+                _ = messageBuilder.AppendJoin(optionsSeparator, descriptor.Name, descriptor.AlternativeName);
+            }
+            else
+            {
+                _ = messageBuilder.Append(descriptor.Name);
+            }
+
+            _ = messageBuilder.Append(' ', cell2Padding)
+                .Append(descriptor.Kind.ToDisplayString())
+                .Append(' ', cell3Padding);
+
+            for (int lineIndex = 0; lineIndex < descriptor.DescriptionLines.Length; lineIndex++)
+            {
+                string descriptionLine = descriptor.DescriptionLines[lineIndex];
+                _ = messageBuilder.AppendLine(descriptionLine);
+
+                if (lineIndex + 1 < descriptor.DescriptionLines.Length)
+                {
+                    _ = messageBuilder.Append(' ', LineIndentation + maxOptionLength + maxKindLength);
+                }
+            }
         }
 
         return messageBuilder;
@@ -213,17 +233,17 @@ internal static class CommandHandler
     {
         _ = messageBuilder.AppendLine("Aliases:")
             .Append(' ', LineIndentation)
-            .AppendLine("Note: If no alias is provided, the default alias")
+            .AppendLine("Note: If no alias is provided, the default alias as specified in the")
             .Append(' ', LineIndentation)
-            .AppendLine("as specified in the YAML configuration file will be used.")
+            .AppendLine("user configuration YAML file will be used.")
             .Append(' ', LineIndentation)
-            .AppendLine("If no such default alias was specified, the default")
+            .AppendLine("If no such default alias was specified, the default profile of")
             .Append(' ', LineIndentation)
-            .AppendLine("profile of the Windows Terminal will be used.")
+            .AppendLine("the Windows Terminal will be used.")
             .Append(' ', LineIndentation)
-            .AppendLine("Furthermore, if the option '-c' or '--config' is specified,")
+            .AppendLine("Furthermore, if the options of type 'Mode' e.g., '--config' or '--variable'")
             .Append(' ', LineIndentation)
-            .AppendLine("the alias argument will be ignored.")
+            .AppendLine("are specified, the alias argument will be ignored.")
             .AppendLine();
 
         int maxAliasLength = configuration.TerminalProfiles.Max(profile => profile.Alias.Length);
@@ -245,36 +265,80 @@ internal static class CommandHandler
 
         return messageBuilder.AppendLine()
             .Append(' ', LineIndentation)
-            // TODO::Make path point to configured location!!!
-            .AppendLine(@">> Edit the user configuration file to manage aliases.")
+            .AppendLine(@">> Note: Edit the user configuration file to manage aliases.")
             .Append(' ', LineIndentation)
-            .AppendLine(@"   Use 'lit -c -p' to get the location.");
+            .AppendLine(@"   Use 'lit -c -p' to show the current location.");
     }
 
     private static void CreateUsageMessage(StringBuilder messageBuilder)
     {
         _ = messageBuilder.AppendLine("Usage:")
             .Append(' ', LineIndentation)
-            .AppendLine(@"lit [<alias>] [<options>...]")
-            .Append(' ', LineIndentation)
-            .AppendLine(@"lit (-c | --config) (-p | --print)")
-            .Append(' ', LineIndentation)
-            .AppendLine(@"lit (-c | --config)")
+            .AppendLine("Launch Windows Terminal at the current working directory (explorer older):")
             .Append(' ', LineIndentation)
             .Append(' ', LineIndentation)
-            .AppendLine(@"[(-s | --source) <source-path>]")
+            .AppendLine("lit [<alias>] [<options>...]")
+            .AppendLine()
+            .Append(' ', LineIndentation)
+            .AppendLine("Show the current location of the user configuration file:")
             .Append(' ', LineIndentation)
             .Append(' ', LineIndentation)
-            .AppendLine(@"[-d | --destination) <destination-path>]")
+            .AppendLine("lit (-c | --config) (-p | --print)")
+            .AppendLine()
+            .Append(' ', LineIndentation)
+            .AppendLine("Set the new location of the user configuration file:")
             .Append(' ', LineIndentation)
             .Append(' ', LineIndentation)
-            .AppendLine("==> Note: If '-s' is not provided the current file location will be used.")
+            .AppendLine("lit (-c | --config)")
             .Append(' ', LineIndentation)
             .Append(' ', LineIndentation)
-            .AppendLine("          If '-d' is not provided the current explorer location")
+            .AppendLine("[(-s | --source) <source-path>]")
             .Append(' ', LineIndentation)
             .Append(' ', LineIndentation)
-            .AppendLine("          (i.e. working directory) will be used.");
+            .AppendLine("[(-d | --destination) <destination-path>]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(">> Note: If '-s' is not provided the current location")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         of the config will be used.")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         If '-d' is not provided the current explorer location")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         (lineIndex.e. working directory) will be used.")
+            .AppendLine()
+            .Append(' ', LineIndentation)
+            .AppendLine("Set a specified environment variable:")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("lit (--var | --variable)")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("[(--val | --value) <value>]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("((-j | --join) | (-r | --replace) [--del | --delimiter]")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("(-m | --machine) | (-u | --user)")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine(">> Note: If '--val' is not provided the current working directory")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         will be used as the new value of the envirnoment variable.")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         If the variable doesn't exist it will create it.")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         If '--del' is not provided then the default path limiter")
+            .Append(' ', LineIndentation)
+            .Append(' ', LineIndentation)
+            .AppendLine("         ';' will be used.")
+            .AppendLine();
     }
 
     public static void ShowError(string message) => ShowErrorDialog(message ?? "An unknown error occurred.");
