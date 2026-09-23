@@ -2,6 +2,7 @@
 
 using System.Buffers;
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Configuration;
 using System.Data;
 using System.Diagnostics;
@@ -65,7 +66,7 @@ public partial class App : Application
         table.Add("-m", systemScopeOption);
         table.Add("--machine", systemScopeOption);
 
-        var variableScopeOption = new CommandLineOptionDescriptor("--variable", "--var", CommandLineOptionId.SetEnvironmentVariable, CommandLineOptionKind.ModeAndValue, ["Set or create an environment variable"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        var variableScopeOption = new CommandLineOptionDescriptor("--variable", "--var", CommandLineOptionId.GetOrSetEnvironmentVariable, CommandLineOptionKind.ModeAndValue, ["Set or create an environment variable"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
         table.Add("--var", variableScopeOption);
         table.Add("--variable", variableScopeOption);
 
@@ -106,13 +107,19 @@ public partial class App : Application
             CommandHandler.ShowError(ex.Message);
             return;
         }
-
-        CommandValidator.ThrowIfCommandSyntaxIsInvalid(command);
+        
+        var idBasedValidCommandOptionsTable = ValidCommandOptionsTable.ToImmutableDictionary(entry => entry.Value.OptionType, entry => entry.Value);
+        CommandValidator.ThrowIfCommandSyntaxIsInvalid(command, idBasedValidCommandOptionsTable);
 
         switch (command.Arguments.OptionsTable)
         {
             case var _ when command.HasMode:
-                await CommandHandler.HandleMode(command, s_applicationSettings);
+                CommandExitMode exitMode = await CommandHandler.HandleMode(command, s_applicationSettings);
+                if (exitMode is CommandExitMode.ShutdownRequired)
+                {
+                    Shutdown();
+                }
+
                 break;
             case var options when options.ContainsKey(CommandLineOptionId.Help):
                 base.OnStartup(e);
@@ -132,16 +139,11 @@ public partial class App : Application
 
 internal static class CommandValidator
 {
-    public static void ThrowIfCommandSyntaxIsInvalid(CommandLineCommand command)
+    public static void ThrowIfCommandSyntaxIsInvalid(CommandLineCommand command, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
+        ArgumentNullException.ThrowIfNull(validCommandOptionsTable);
+
         CommandLineOption? modeOption = null;
-        void ThrowIfModeAlreadySet()
-        {
-            if (modeOption is not null)
-            {
-                throw new InvalidCommandArgumentException("Invalid command argument. A command can only have a single mode option. Use 'lit --help' to get a list of mode options.");
-            }
-        }
 
         foreach (KeyValuePair<CommandLineOptionId, CommandLineOption> entry in command.Arguments.OptionsTable)
         {
@@ -149,65 +151,157 @@ internal static class CommandValidator
             switch (option.Descriptor.OptionType)
             {
                 case CommandLineOptionId.GetOrSetConfigLocation:
-                    ThrowIfModeAlreadySet();
-
-                    modeOption = option;
-                    bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out CommandLineOption printOption);
-                    CommandLineOption destinationPathOption = default;
-                    if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption sourcePathOption))
-                    {
-                        if (isPrintOptionProvided)
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid command argument. Providing the '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option together with the '{printOption.Descriptor.Name} | {printOption.Descriptor.AlternativeName}' is not allowed. Use 'lit --help' to get the comamnd syntax.");
-                        }
-
-                        string sourcePath = sourcePathOption.Value;
-                        if (string.IsNullOrWhiteSpace(sourcePath))
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
-                        }
-
-                        if (!CommandHandlerHelpers.IsFilePath(sourcePath))
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid path argument. A source file path must provide the file name of the source.");
-                        }
-
-                        if (!Path.HasExtension(sourcePath)
-                            || !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
-                        }
-                    }
-                    else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out destinationPathOption))
-                    {
-                        if (isPrintOptionProvided)
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid command argument. Providing the '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option together with the '{printOption.Descriptor.Name} | {printOption.Descriptor.AlternativeName}' is not allowed. Use 'lit --help' to get the comamnd syntax.");
-                        }
-
-                        string destinationPath = option.Value;
-                        if (string.IsNullOrWhiteSpace(destinationPath))
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
-                        }
-
-                        // Only validate extension if the path is a file path.
-                        // Otherwise allow the destination to be a directory.
-                        if (CommandHandlerHelpers.IsFilePath(destinationPath)
-                            && !Path.HasExtension(destinationPath) 
-                            || !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
-                        }
-                    }
-
-                    if (command.HasAlias)
-                    {
-                        throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' the command cann't specify an alias. Use 'lit --help' to get the comamnd syntax.");
-                    }
-
+                    ValidateGetOrSetConfigLocationCommandSyntax(command, ref modeOption, option, validCommandOptionsTable);
+                    break;
+                case CommandLineOptionId.GetOrSetEnvironmentVariable:
+                    ValidateGetOrSetEnvironmentVariableCommandSyntax(command, ref modeOption, option, validCommandOptionsTable);
                     break;
             }
+        }
+    }
+
+    private static void ValidateGetOrSetEnvironmentVariableCommandSyntax(CommandLineCommand command, ref CommandLineOption? modeOption, CommandLineOption option, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
+        ThrowIfModeAlreadySet(ref modeOption);
+        modeOption = option;
+
+        var invalidOptions = new HashSet<CommandLineOptionId>(command.Arguments.OptionsTable.Keys);
+        _ = invalidOptions.Remove(CommandLineOptionId.GetOrSetEnvironmentVariable);
+
+        bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out _);
+        if (isPrintOptionProvided)
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.Print);
+            ThrowIfGreaterThan(invalidOptions.Count, 0);
+
+            return;
+        }
+
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableValue, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableValue);
+        }
+
+        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _)
+            && !command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
+        {
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out CommandLineOptionDescriptor machineScopeDescriptor);
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out CommandLineOptionDescriptor userScopeDescriptor);
+            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
+        }
+
+        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out _)
+            && !command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out _))
+        {
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out CommandLineOptionDescriptor machineScopeDescriptor);
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out CommandLineOptionDescriptor userScopeDescriptor);
+            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
+        }
+
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeMachine);
+        }
+        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeUser);
+        }
+
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableWriteModeJoin);
+        }
+        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableWriteModeReplace);
+        }
+
+        ThrowIfGreaterThan(invalidOptions.Count, 0);
+    }
+
+    private static void ValidateGetOrSetConfigLocationCommandSyntax(CommandLineCommand command, ref CommandLineOption? modeOption, CommandLineOption option, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
+        ThrowIfModeAlreadySet(ref modeOption);
+        modeOption = option;
+
+        var invalidOptions = new HashSet<CommandLineOptionId>(command.Arguments.OptionsTable.Keys);
+        _ = invalidOptions.Remove(CommandLineOptionId.GetOrSetConfigLocation);
+
+        bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out _);
+        if (isPrintOptionProvided)
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.Print);
+            ThrowIfGreaterThan(invalidOptions.Count, 0);
+
+            return;
+        }
+
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.SourcePath, out CommandLineOption sourcePathOption))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.SourcePath);
+
+            string sourcePath = sourcePathOption.Value;
+            if (string.IsNullOrWhiteSpace(sourcePath))
+            {
+                throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
+            }
+
+            if (!CommandHandlerHelpers.IsFilePath(sourcePath))
+            {
+                throw new InvalidCommandArgumentException($"Invalid path argument. A source file path must provide the file name of the source.");
+            }
+
+            if (!Path.HasExtension(sourcePath)
+                || !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
+            {
+                throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
+            }
+        }
+        
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.DestinationPath, out CommandLineOption destinationPathOption))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.DestinationPath);
+
+            string destinationPath = destinationPathOption.Value;
+            if (string.IsNullOrWhiteSpace(destinationPath))
+            {
+                throw new InvalidCommandArgumentException($"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.");
+            }
+
+            // Only validate extension if the path is a file path.
+            // Otherwise allow the destination to be a directory.
+            if (CommandHandlerHelpers.IsFilePath(destinationPath)
+                && (!Path.HasExtension(destinationPath)
+                || !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase))))
+            {
+                throw new InvalidCommandArgumentException($"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.");
+            }
+        }
+
+        ThrowIfGreaterThan(invalidOptions.Count, 0);
+
+        if (command.HasAlias)
+        {
+            throw new InvalidCommandArgumentException($"Invalid command form. When selecting the mode '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' the command cann't specify an alias. Use 'lit --help' to get the comamnd syntax.");
+        }
+    }
+
+    [DoesNotReturn]
+    private static void ThrowInvalidCommandArgumentExceptionForArgumentMissing(string commandName, string missingOptionsString) => throw new InvalidCommandArgumentException($"Invalid argument list. The required option {missingOptionsString} for the {commandName} command is missing. Use 'lit --help' to get the comamnd syntax.");
+
+    private static void ThrowIfGreaterThan(int invalidOptionsCount, int threshold)
+    {
+        if (invalidOptionsCount > threshold)
+        {
+            throw new InvalidCommandArgumentException($"Invalid command argument list: too many arguments. Use 'lit --help' to get the comamnd syntax.");
+        }
+    }
+
+    private static void ThrowIfModeAlreadySet(ref readonly CommandLineOption? modeOption)
+    {
+        if (modeOption is not null)
+        {
+            throw new InvalidCommandArgumentException("Invalid command argument. A command can only have a single mode option. Use 'lit --help' to get a list of mode options.");
         }
     }
 }

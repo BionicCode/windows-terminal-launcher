@@ -70,45 +70,64 @@ internal static class CommandHandler
 
     public static void SetOrGetEnvirnomentVariable(CommandLineCommand command)
     {
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableName, out CommandLineOption variableNameOption)
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.GetOrSetEnvironmentVariable, out CommandLineOption variableNameOption)
             && (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeMachine)
-                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeMachine.ToDisplayString(), out EnvironmentVariableTarget environmentVariableTarget)
+                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeMachine.ToDisplayString(), ignoreCase: true, out EnvironmentVariableTarget environmentVariableTarget)
             || command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeUser)
-                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeUser.ToDisplayString(), out environmentVariableTarget)))
+                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeUser.ToDisplayString(), ignoreCase: true, out environmentVariableTarget)))
         {
+
+            if (environmentVariableTarget is EnvironmentVariableTarget.Machine
+                    && !CommandHandlerHelpers.IsCurrentProcessElevated())
+            {
+                _ = CommandHandlerHelpers.RelaunchElevated();
+                return;
+            }
+
             string newValue = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableValue, out CommandLineOption variableValueOption)
                 ? variableValueOption.Value
                 : Environment.CurrentDirectory;
 
-            // We have to use the registry here because 'Environment.SetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
+            // We have to use the registry here because 'Environment.GetOrSetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
             // But we don't want to erase such variabled lineIndex.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
             using RegistryKey? key = (environmentVariableTarget is EnvironmentVariableTarget.User
                 ? Registry.CurrentUser.OpenSubKey(
                     "Environment",
-                    RegistryKeyPermissionCheck.Default,
-                    RegistryRights.CreateSubKey | RegistryRights.SetValue | RegistryRights.QueryValues)
+        RegistryKeyPermissionCheck.ReadWriteSubTree,
+                    RegistryRights.SetValue | RegistryRights.QueryValues)
                 : Registry.LocalMachine.OpenSubKey(
                     @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-                    RegistryKeyPermissionCheck.Default,
-                    RegistryRights.CreateSubKey | RegistryRights.SetValue | RegistryRights.QueryValues)) 
+        RegistryKeyPermissionCheck.ReadWriteSubTree,
+                    RegistryRights.SetValue | RegistryRights.QueryValues)) 
                 ?? throw new InvalidOperationException("Environment registry key is missing.");
-
+            
             string variableName = variableNameOption.Value;
             object? rawValue = key.GetValue(
                 variableName,
                 null,
                 RegistryValueOptions.DoNotExpandEnvironmentNames);
             
-            string currentValue = rawValue as string ?? string.Empty;            
-            if (!string.IsNullOrWhiteSpace(currentValue)
-                && command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
+            string currentValue = rawValue as string ?? string.Empty;
+            string delimiter = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out CommandLineOption delimiterOption)
+                ? delimiterOption.Value
+                : Path.PathSeparator.ToString();
+            if (!string.IsNullOrWhiteSpace(currentValue))
             {
-                string delimiter = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out CommandLineOption delimiterOption)
-                    ? delimiterOption.Value
-                    : Path.PathSeparator.ToString();
-                newValue = string.Join(delimiter, currentValue, newValue);
+                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
+                {
+                    if (ContainsJoinedValue(currentValue, newValue, delimiter, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    newValue = string.Join(delimiter, currentValue, newValue);
+                }
+                else if (currentValue.Equals(newValue, StringComparison.Ordinal))
+                {
+                    return;
+                }
             }
-            
+
             RegistryValueKind kind = rawValue is null
                 ? RegistryValueKind.String
                 : key.GetValueKind(variableName);
@@ -116,6 +135,26 @@ internal static class CommandHandler
 
             BroadcastEnvironmentChange();
         }
+    }
+
+    private static bool ContainsJoinedValue(
+    string currentValue,
+    string value,
+    string delimiter,
+    StringComparison comparison = StringComparison.Ordinal)
+    {
+        ReadOnlySpan<char> source = currentValue.AsSpan();
+        ReadOnlySpan<char> candidate = value.AsSpan();
+
+        foreach (Range range in source.Split(delimiter.AsSpan()))
+        {
+            if (source[range].Equals(candidate, comparison))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static unsafe void BroadcastEnvironmentChange()
@@ -270,76 +309,83 @@ internal static class CommandHandler
             .AppendLine(@"   Use 'lit -c -p' to show the current location.");
     }
 
-    private static void CreateUsageMessage(StringBuilder messageBuilder)
-    {
-        _ = messageBuilder.AppendLine("Usage:")
-            .Append(' ', LineIndentation)
-            .AppendLine("Launch Windows Terminal at the current working directory (explorer older):")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("lit [<alias>] [<options>...]")
-            .AppendLine()
-            .Append(' ', LineIndentation)
-            .AppendLine("Show the current location of the user configuration file:")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("lit (-c | --config) (-p | --print)")
-            .AppendLine()
-            .Append(' ', LineIndentation)
-            .AppendLine("Set the new location of the user configuration file:")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("lit (-c | --config)")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("[(-s | --source) <source-path>]")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("[(-d | --destination) <destination-path>]")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine(">> Note: If '-s' is not provided the current location")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         of the config will be used.")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         If '-d' is not provided the current explorer location")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         (lineIndex.e. working directory) will be used.")
-            .AppendLine()
-            .Append(' ', LineIndentation)
-            .AppendLine("Set a specified environment variable:")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("lit (--var | --variable)")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("[(--val | --value) <value>]")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("((-j | --join) | (-r | --replace) [--del | --delimiter]")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("(-m | --machine) | (-u | --user)")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine(">> Note: If '--val' is not provided the current working directory")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         will be used as the new value of the envirnoment variable.")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         If the variable doesn't exist it will create it.")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         If '--del' is not provided then the default path limiter")
-            .Append(' ', LineIndentation)
-            .Append(' ', LineIndentation)
-            .AppendLine("         ';' will be used.")
-            .AppendLine();
-    }
+    private static void CreateUsageMessage(StringBuilder messageBuilder) => _ = messageBuilder
+        .AppendLine("Usage:")
+        .Append(' ', LineIndentation)
+        .AppendLine("Launch Windows Terminal at the current working directory (explorer older):")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("lit [<alias>] [<options>...]")
+        .AppendLine()
+        .Append(' ', LineIndentation)
+        .AppendLine("Show the current location of the user configuration file:")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("lit (-c | --config) (-p | --print)")
+        .AppendLine()
+        .Append(' ', LineIndentation)
+        .AppendLine("Set the new location of the user configuration file:")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("lit (-c | --config)")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("[(-s | --source) <source-path>]")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("[(-d | --destination) <destination-path>]")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine(">> Note: If '-s' is not provided the current location")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         of the config will be used.")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         If '-d' is not provided the current explorer location")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         (lineIndex.e. working directory) will be used.")
+        .AppendLine()
+        .Append(' ', LineIndentation)
+        .AppendLine("Set a specified environment variable:")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("lit (--var | --variable)")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("[(--val | --value) <value>]")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("((-j | --join) | (-r | --replace) [--del | --delimiter]")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("(-m | --machine) | (-u | --user)")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine(">> Note: If '--val' is not provided the current working directory")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         will be used as the new value of the envirnoment variable.")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         If the variable doesn't exist it will create it.")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         If '--del' is not provided then the default path limiter")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         ';' will be used.")
+        .AppendLine()
+        .Append(' ', LineIndentation)
+        .AppendLine("Print a specified environment variable:")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("lit (--var | --variable)")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("(--p | --print)")
+        .AppendLine();
 
     public static void ShowError(string message) => ShowErrorDialog(message ?? "An unknown error occurred.");
 
@@ -385,7 +431,7 @@ internal static class CommandHandler
         dialog.Show();
     }
 
-    internal static async Task HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
+    internal static async Task<CommandExitMode> HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
     {
         ArgumentNullException.ThrowIfNull(applicationSettings);
 
@@ -414,6 +460,7 @@ internal static class CommandHandler
                     };
 
                     dialog.Show();
+                    return CommandExitMode.Auto;
                 }
                 else
                 {
@@ -423,7 +470,7 @@ internal static class CommandHandler
                     _ = TryGetpath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory,  fallbackFileName);
                     if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        return;
+                        return CommandExitMode.ShutdownRequired;
                     }
 
                     if (File.Exists(destinationPath))
@@ -442,18 +489,24 @@ internal static class CommandHandler
                         bool? dialogResult = dialog.ShowDialog();
                         if (dialogResult == false)
                         {
-                            return;
+                            return CommandExitMode.ShutdownRequired;
                         }
                     }
 
                     SetConfigLocationAsync(sourcePath, destinationPath);
                     applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, destinationPath);
-                }
 
-                break;
-            case CommandLineOptionId.SetEnvironmentVariable:
+                    return CommandExitMode.ShutdownRequired;
+                }
+            case CommandLineOptionId.GetOrSetEnvironmentVariable:
+
+                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
+                {
+                    return CommandExitMode.Auto;
+                }
+                    
                 SetOrGetEnvirnomentVariable(command);
-                break;
+                return CommandExitMode.ShutdownRequired;
             default:
                 throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
         }
@@ -481,9 +534,9 @@ internal static class CommandHandler
             path = fallbackPath;
         }
 
-        if (string.IsNullOrWhiteSpace(path)
-            && !CommandHandlerHelpers.IsFilePath(path)
-            && !string.IsNullOrWhiteSpace(fileName))
+        if (!string.IsNullOrWhiteSpace(path)
+            && !string.IsNullOrWhiteSpace(fileName)
+            && !CommandHandlerHelpers.IsFilePath(path))
         {
             path = Path.Combine(path, fileName);
         }
@@ -522,4 +575,11 @@ internal static class CommandHandler
             return;
         }
     }
+}
+
+internal enum CommandExitMode
+{
+    Undefined,
+    ShutdownRequired,
+    Auto
 }

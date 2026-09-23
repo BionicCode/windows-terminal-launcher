@@ -134,17 +134,14 @@ internal static class CommandLineArgumentParser
         }
 
         // Optional: Check for invalid file name characters in segments
-        string[] segments = path.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
-        SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
-        foreach (string segment in segments)
+        if (!CommandHandlerHelpers.IsFilePath(path))
         {
-            if (segment.ContainsAny(invalidNameChars))
-            {
-                return false;
-            }
+            return true;
         }
 
-        return true;
+        string fileName = CommandHandlerHelpers.GetFileNameIfFile(path);
+        SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
+        return !fileName.ContainsAny(invalidNameChars);
     }
 
     private static CommandContext CreateCommandContext(Configuration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)

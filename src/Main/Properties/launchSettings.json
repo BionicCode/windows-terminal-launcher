@@ -30,7 +30,12 @@
     },
     "Copy-Config-File": {
       "commandName": "Project",
-      "commandLineArgs": "--config"
+      "commandLineArgs": "--config",
+      "workingDirectory": "C:\\Users\\Mobil\\.config\\lit"
+    },
+    "Set-Environmen-Variable": {
+      "commandName": "Project",
+      "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -m -j"
     }
   }
 }

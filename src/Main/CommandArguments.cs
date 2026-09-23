@@ -17,10 +17,10 @@ internal readonly record struct CommandArguments(
     public bool HasOptions => OptionsTable is not null && OptionsTable.Count > 0;
     public bool HasMode => _hasMode.IsSet
         ? _hasMode
-        : _hasMode.SetValue(HasOptions && OptionsTable.Any(option => option.Value.Descriptor.Kind is CommandLineOptionKind.Mode));
+        : _hasMode.SetValue(HasOptions && OptionsTable.Any(option => option.Value.Descriptor.Kind is CommandLineOptionKind.Mode or CommandLineOptionKind.ModeAndValue));
     public CommandLineOptionId Mode => _mode.IsSet
         ? _mode
         : _mode.SetValue(HasMode
-            ? OptionsTable.First(entry => entry.Value.Descriptor.Kind is CommandLineOptionKind.Mode).Value.Descriptor.OptionType
+            ? OptionsTable.First(entry => entry.Value.Descriptor.Kind is CommandLineOptionKind.Mode or CommandLineOptionKind.ModeAndValue).Value.Descriptor.OptionType
             : CommandLineOptionId.Undefined);
 };

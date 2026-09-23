@@ -16,8 +16,7 @@ internal enum CommandLineOptionId
     /// <summary>
     /// Mode option.
     /// </summary>
-    SetEnvironmentVariable,
-    EnvironmentVariableName,
+    GetOrSetEnvironmentVariable,
     EnvironmentVariableValue,
     EnvironmentVariableScopeUser,
     EnvironmentVariableScopeMachine,
