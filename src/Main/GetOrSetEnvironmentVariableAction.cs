@@ -54,8 +54,6 @@ internal class GetOrSetEnvironmentVariableAction : ICommandAction
             ? variableValueOption.Value
             : Environment.CurrentDirectory;
 
-        // TODO::Attempt to replace its longest leading path prefix with an existing environment-variable reference.
-
         // We have to use the registry here because 'Environment.GetOrSetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
         // But we don't want to erase such variabled lineIndex.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
         using RegistryKey registryKey = (environmentVariableTarget is EnvironmentVariableTarget.User
@@ -69,12 +67,15 @@ internal class GetOrSetEnvironmentVariableAction : ICommandAction
                 RegistryRights.SetValue | RegistryRights.QueryValues))
             ?? throw new InvalidOperationException("Environment registry key is missing.");
 
-        if (optionsTable.ContainsKey(CommandLineOptionId.FoldPath))
-        {
-            _ = TryFoldNewValue(ref newValue, environmentVariableTarget, registryKey);
-        }
-
         string variableName = variableNameOption.Value;
+
+        bool wasFolded = optionsTable.ContainsKey(CommandLineOptionId.FoldPath)
+            && TryFoldNewValue(
+                ref newValue,
+                variableName,
+                environmentVariableTarget,
+                registryKey);
+
         object? rawValue = registryKey.GetValue(
             variableName,
             null,
@@ -94,27 +95,97 @@ internal class GetOrSetEnvironmentVariableAction : ICommandAction
         RegistryValueKind kind = rawValue is null
             ? RegistryValueKind.String
             : registryKey.GetValueKind(variableName);
-        registryKey.SetValue(variableName, newValue, kind);
+        if (wasFolded
+            && kind is RegistryValueKind.String)
+        {
+            kind = RegistryValueKind.ExpandString;
+        }
 
+        registryKey.SetValue(variableName, newValue, kind);
         BroadcastEnvironmentChange();
 
         return CommandExitMode.ShutdownRequired;
     }
 
-    private static bool TryFoldNewValue(ref string newValue, EnvironmentVariableTarget environmentVariableTarget, RegistryKey registryKey)
+    private static bool TryFoldNewValue(ref string newValue, string targetVariableName, EnvironmentVariableTarget environmentVariableTarget, RegistryKey registryKey)
     {
-        var variables = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string trimmedCurrentValue = string.Empty;
+        Dictionary<string, string> candidates = new(StringComparer.OrdinalIgnoreCase);
         if (environmentVariableTarget is EnvironmentVariableTarget.User)
-        {            
+        {
             using RegistryKey systemEnvironmentRegistryKey = Registry.LocalMachine.OpenSubKey(
                 SystemEnvironmentRegistryKey,
-                RegistryKeyPermissionCheck.ReadWriteSubTree,
-                RegistryRights.SetValue | RegistryRights.QueryValues) 
+                RegistryKeyPermissionCheck.ReadSubTree,
+                RegistryRights.QueryValues)
                 ?? throw new InvalidOperationException("Environment registry key is missing.");
+
+            AddEntries(newValue, systemEnvironmentRegistryKey, candidates, isOverrideMachineVariable: false);
         }
 
-        // TODO::Because user variables have precedence over system variables,
-        // the obtained user variables must replace existing system variable in the 'variables' dictionary
+        // Important for User-over-Machine precedence:
+        // even a nonmatching User definition must shadow the same Machine variable.
+        AddEntries(newValue, registryKey, candidates, isOverrideMachineVariable: environmentVariableTarget is EnvironmentVariableTarget.User);
+        KeyValuePair<string, string> selectedCandidate = candidates.OrderByDescending(entry => entry.Value.Length).FirstOrDefault(entry => !string.IsNullOrWhiteSpace(entry.Value));
+        if (selectedCandidate is not { Key: null, Value: null })
+        {
+            string remainingNewValue = newValue[selectedCandidate.Value!.Length..];
+            newValue = $"%{selectedCandidate.Key}%{remainingNewValue}";
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void AddEntries(
+        string newValue, 
+        RegistryKey registryKey, 
+        Dictionary<string, string> candidates, 
+        bool isOverrideMachineVariable)
+    {
+        string[] variableNames = registryKey.GetValueNames();
+        foreach (string variableName in variableNames)
+        {
+            if (isOverrideMachineVariable)
+            {
+                _ = candidates.Remove(variableName);
+            }
+
+            string? rawValue = registryKey.GetValue(
+                variableName,
+                null,
+                RegistryValueOptions.None) as string;
+            if (rawValue is not string currentValue
+                || !IsPrefixMatch(newValue, currentValue))
+            {
+                continue;
+            }
+
+            candidates.Add(variableName, currentValue);
+
+            // Already found best candidate
+            if (currentValue.Length == newValue.Length)
+            {
+                break;
+            }
+        }
+    }
+
+    private static bool IsPrefixMatch(string value, string candidate)
+    {
+        if (!value.StartsWith(
+            candidate,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return value.Length == candidate.Length
+            || Path.EndsInDirectorySeparator(candidate)
+            // The next charact of the new value after the candidate match must be a directory separator
+            // (if the match is not of the same length and not already ending with a directory separator)
+            || value[candidate.Length] == Path.DirectorySeparatorChar 
+            || value[candidate.Length] == Path.AltDirectorySeparatorChar;
     }
 
     private static unsafe void BroadcastEnvironmentChange()
