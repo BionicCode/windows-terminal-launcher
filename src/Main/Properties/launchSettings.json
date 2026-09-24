@@ -33,9 +33,13 @@
       "commandLineArgs": "--config",
       "workingDirectory": "C:\\Users\\Mobil\\.config\\lit"
     },
-    "Set-Environmen-Variable": {
+    "Set-Environment-Variable": {
       "commandName": "Project",
       "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -m -j"
+    },
+    "Get-Environment-Variable": {
+      "commandName": "Project",
+      "commandLineArgs": "--var \"PATH\" -m -p"
     }
   }
 }

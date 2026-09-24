@@ -95,7 +95,7 @@ public sealed class WriteOnce<TValue> : IFormattable
 
     public TValue SetValue(TValue value) => TrySetValue(value) 
         ? this 
-        : throw new InvalidOperationException("Name has already been initialized and cannot be modified.");
+        : throw new InvalidOperationException("UserEnvironmentRegistryKey has already been initialized and cannot be modified.");
 
     [SuppressMessage("Design", "CA1024:Use properties where appropriate", Justification = "Required.")]
     public TValue GetValueOrDefault() => Volatile.Read(ref _isSet) != 0 ? _value : default!;

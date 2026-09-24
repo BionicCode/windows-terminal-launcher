@@ -3,22 +3,15 @@
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
-using System.IO;
 using System.Security;
-using System.Security.AccessControl;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using Microsoft.VisualBasic.FileIO;
-using Microsoft.Win32;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.UI.WindowsAndMessaging;
 using YamlDotNet.Core.Tokens;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 
@@ -68,75 +61,6 @@ internal static class CommandHandler
         using Process? process = Process.Start(startInfo);
     }
 
-    public static void SetOrGetEnvirnomentVariable(CommandLineCommand command)
-    {
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.GetOrSetEnvironmentVariable, out CommandLineOption variableNameOption)
-            && (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeMachine)
-                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeMachine.ToDisplayString(), ignoreCase: true, out EnvironmentVariableTarget environmentVariableTarget)
-            || command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeUser)
-                && Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeUser.ToDisplayString(), ignoreCase: true, out environmentVariableTarget)))
-        {
-
-            if (environmentVariableTarget is EnvironmentVariableTarget.Machine
-                    && !CommandHandlerHelpers.IsCurrentProcessElevated())
-            {
-                _ = CommandHandlerHelpers.RelaunchElevated();
-                return;
-            }
-
-            string newValue = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableValue, out CommandLineOption variableValueOption)
-                ? variableValueOption.Value
-                : Environment.CurrentDirectory;
-
-            // We have to use the registry here because 'Environment.GetOrSetEnvironmentVariable' will resolve variables like "%Temp%\Folder".
-            // But we don't want to erase such variabled lineIndex.e. folded paths. Using the registry manually allows us to preserve "%TEMP%".
-            using RegistryKey? key = (environmentVariableTarget is EnvironmentVariableTarget.User
-                ? Registry.CurrentUser.OpenSubKey(
-                    "Environment",
-        RegistryKeyPermissionCheck.ReadWriteSubTree,
-                    RegistryRights.SetValue | RegistryRights.QueryValues)
-                : Registry.LocalMachine.OpenSubKey(
-                    @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment",
-        RegistryKeyPermissionCheck.ReadWriteSubTree,
-                    RegistryRights.SetValue | RegistryRights.QueryValues)) 
-                ?? throw new InvalidOperationException("Environment registry key is missing.");
-            
-            string variableName = variableNameOption.Value;
-            object? rawValue = key.GetValue(
-                variableName,
-                null,
-                RegistryValueOptions.DoNotExpandEnvironmentNames);
-            
-            string currentValue = rawValue as string ?? string.Empty;
-            string delimiter = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out CommandLineOption delimiterOption)
-                ? delimiterOption.Value
-                : Path.PathSeparator.ToString();
-            if (!string.IsNullOrWhiteSpace(currentValue))
-            {
-                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
-                {
-                    if (ContainsJoinedValue(currentValue, newValue, delimiter, StringComparison.Ordinal))
-                    {
-                        return;
-                    }
-
-                    newValue = string.Join(delimiter, currentValue, newValue);
-                }
-                else if (currentValue.Equals(newValue, StringComparison.Ordinal))
-                {
-                    return;
-                }
-            }
-
-            RegistryValueKind kind = rawValue is null
-                ? RegistryValueKind.String
-                : key.GetValueKind(variableName);
-            key.SetValue(variableName, newValue, kind);
-
-            BroadcastEnvironmentChange();
-        }
-    }
-
     private static bool ContainsJoinedValue(
     string currentValue,
     string value,
@@ -155,23 +79,6 @@ internal static class CommandHandler
         }
 
         return false;
-    }
-
-    private static unsafe void BroadcastEnvironmentChange()
-    {
-        const string environment = "Environment";
-
-        fixed (char* environmentPtr = environment)
-        {
-            _ = PInvoke.SendMessageTimeout(
-                HWND.HWND_BROADCAST,
-                PInvoke.WM_SETTINGCHANGE,
-                0,
-                (nint)environmentPtr,
-                SEND_MESSAGE_TIMEOUT_FLAGS.SMTO_ABORTIFHUNG,
-                5000,
-                null);
-        }
     }
 
     public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
@@ -363,6 +270,9 @@ internal static class CommandHandler
         .AppendLine("(-m | --machine) | (-u | --user)")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
+        .AppendLine("[--fp | --fold-path]")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
         .AppendLine(">> Note: If '--val' is not provided the current working directory")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
@@ -378,10 +288,13 @@ internal static class CommandHandler
         .AppendLine("         ';' will be used.")
         .AppendLine()
         .Append(' ', LineIndentation)
-        .AppendLine("Print a specified environment variable:")
+        .AppendLine("Show the value of a specified environment variable:")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("lit (--var | --variable)")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("(-m | --machine) | (-u | --user)")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("(--p | --print)")
@@ -438,148 +351,13 @@ internal static class CommandHandler
         switch (command.Mode)
         {
             case CommandLineOptionId.GetOrSetConfigLocation:
-                _ = applicationSettings.TryGet(
-                    AppSettingsKeys.UserConfigFileLocationKey,
-                    out string currentConfigFilePath);
-
-                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
-                {
-                    string message = string.IsNullOrWhiteSpace(currentConfigFilePath)
-                        ? "No location set. Please set a location first. See '--help' or '-h'."
-                        : currentConfigFilePath;
-
-                    var dialog = new InfoDialog
-                    {
-                        Title = "lit.exe user configuration file location",
-                        Header = "The user configuration YAML file is located at:",
-                        Body = message,
-                        Icon = Imaging.CreateBitmapSourceFromHIcon(
-                            SystemIcons.Information.Handle,
-                            Int32Rect.Empty,
-                            BitmapSizeOptions.FromEmptyOptions())
-                    };
-
-                    dialog.Show();
-                    return CommandExitMode.Auto;
-                }
-                else
-                {
-                    _ = TryGetpath(CommandLineOptionId.SourcePath, command, out string sourcePath, currentConfigFilePath);
-
-                    string fallbackFileName = CommandHandlerHelpers.GetFileNameIfFile(sourcePath);
-                    _ = TryGetpath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory,  fallbackFileName);
-                    if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return CommandExitMode.ShutdownRequired;
-                    }
-
-                    if (File.Exists(destinationPath))
-                    {
-                        var dialog = new InteractionDialog
-                        {
-                            Title = "File exists",
-                            Header = "File Exists:",
-                            Body = $"The file '{destinationPath}'{Environment.NewLine}already exists. Overwrite the existing file?",
-                            Icon = Imaging.CreateBitmapSourceFromHIcon(
-                                SystemIcons.Warning.Handle,
-                                Int32Rect.Empty,
-                                BitmapSizeOptions.FromEmptyOptions())
-                        };
-
-                        bool? dialogResult = dialog.ShowDialog();
-                        if (dialogResult == false)
-                        {
-                            return CommandExitMode.ShutdownRequired;
-                        }
-                    }
-
-                    SetConfigLocationAsync(sourcePath, destinationPath);
-                    applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, destinationPath);
-
-                    return CommandExitMode.ShutdownRequired;
-                }
+                var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
+                return getOrSetUserConfigLocationAction.Execute(command, applicationSettings);
             case CommandLineOptionId.GetOrSetEnvironmentVariable:
-
-                if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
-                {
-                    return CommandExitMode.Auto;
-                }
-                    
-                SetOrGetEnvirnomentVariable(command);
-                return CommandExitMode.ShutdownRequired;
+                var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
+                return getOrSetEnvironmentVariable.Execute(command, applicationSettings);
             default:
                 throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
         }
     }
-
-    private static bool TryGetpath(
-        CommandLineOptionId pathId, 
-        CommandLineCommand command, 
-        [NotNullWhen(true)] out string path, 
-        string? fallbackPath = null, 
-        string? fileName = null)
-    {
-        if (pathId is not CommandLineOptionId.SourcePath and not CommandLineOptionId.DestinationPath)
-        {
-            throw new ArgumentException($"Provided option ID '{Enum.GetName(pathId)}' is n ot a path ID.");
-        }
-
-        path = string.Empty;
-        if (command.Arguments.OptionsTable.TryGetValue(pathId, out CommandLineOption option))
-        {
-            path = option.Value;
-        }
-        else if (!string.IsNullOrWhiteSpace(fallbackPath))
-        {
-            path = fallbackPath;
-        }
-
-        if (!string.IsNullOrWhiteSpace(path)
-            && !string.IsNullOrWhiteSpace(fileName)
-            && !CommandHandlerHelpers.IsFilePath(path))
-        {
-            path = Path.Combine(path, fileName);
-        }
-
-        return !string.IsNullOrWhiteSpace(path);
-    }
-
-    private static void SetConfigLocationAsync(string sourcePath, string destinationPath)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
-
-        try
-        {
-            File.Copy(sourcePath, destinationPath, true);
-        }
-        catch (Exception ex) when (ex
-            is UnauthorizedAccessException
-            or PathTooLongException
-            or SecurityException
-            or IOException
-            or DirectoryNotFoundException)
-        {
-            var dialog = new InfoDialog
-            {
-                Title = "lit.exe Error",
-                Header = "The copy operation failed:",
-                Body = ex.Message,
-                Icon = Imaging.CreateBitmapSourceFromHIcon(
-                    SystemIcons.Information.Handle,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions())
-            };
-
-            dialog.Show();
-            return;
-        }
-    }
-}
-
-internal enum CommandExitMode
-{
-    Undefined,
-    ShutdownRequired,
-    Auto
 }

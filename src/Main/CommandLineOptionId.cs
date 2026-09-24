@@ -23,5 +23,6 @@ internal enum CommandLineOptionId
     EnvironmentVariableWriteModeJoin,
     EnvironmentVariableWriteModeJoinDelimiter,
     EnvironmentVariableWriteModeReplace,
-    Print
+    Print,
+    FoldPath
 }

@@ -10,9 +10,9 @@ internal static class EnumExtensions
     {
         CommandLineOptionKind.Undefined => "Undefined",
         CommandLineOptionKind.Mode => "Mode",
-        CommandLineOptionKind.Value => "Key-Value",
+        CommandLineOptionKind.Value => "Key-VariableName_PATH",
         CommandLineOptionKind.Flag => "Flag",
-        CommandLineOptionKind.ModeAndValue => "Mode-And-Value",
+        CommandLineOptionKind.ModeAndValue => "Mode-And-VariableName_PATH",
         _ => throw new NotSupportedException($"The value '{optionKind}' is not a known value of the enum '{nameof(CommandLineOptionId)}''")
     };
 

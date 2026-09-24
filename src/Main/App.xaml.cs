@@ -86,6 +86,10 @@ public partial class App : Application
         table.Add("--del", delimiterOption);
         table.Add("--delimiter", delimiterOption);
 
+        var foldPathOption = new CommandLineOptionDescriptor("--fold-path", "--fp", CommandLineOptionId.FoldPath, CommandLineOptionKind.Flag,["Fold the supplied path by replacing", "the longest matching path prefix with", "an existing environment variable."], @"lit --var PATH --val ""I:\GitHubRepositories\WindowsTerminalLauncher\artifacts"" -u -j --fold-path", IsOptional: true);
+        table.Add("--fp", foldPathOption);
+        table.Add("--fold-path", foldPathOption);
+
         ValidCommandOptionsTable = table.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -167,6 +171,21 @@ internal static class CommandValidator
 
         var invalidOptions = new HashSet<CommandLineOptionId>(command.Arguments.OptionsTable.Keys);
         _ = invalidOptions.Remove(CommandLineOptionId.GetOrSetEnvironmentVariable);
+        
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeMachine);
+        }
+        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeUser);
+        }
+        else
+        {
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out CommandLineOptionDescriptor machineScopeDescriptor);
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out CommandLineOptionDescriptor userScopeDescriptor);
+            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
+        }
 
         bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out _);
         if (isPrintOptionProvided)
@@ -182,29 +201,9 @@ internal static class CommandValidator
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableValue);
         }
 
-        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _)
-            && !command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.FoldPath, out _))
         {
-            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out CommandLineOptionDescriptor machineScopeDescriptor);
-            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out CommandLineOptionDescriptor userScopeDescriptor);
-            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
-        }
-
-        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out _)
-            && !command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out _))
-        {
-            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out CommandLineOptionDescriptor machineScopeDescriptor);
-            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out CommandLineOptionDescriptor userScopeDescriptor);
-            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
-        }
-
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _))
-        {
-            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeMachine);
-        }
-        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
-        {
-            _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeUser);
+            _ = invalidOptions.Remove(CommandLineOptionId.FoldPath);
         }
 
         if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out _))
@@ -214,6 +213,12 @@ internal static class CommandValidator
         else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out _))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableWriteModeReplace);
+        }
+        else
+        {
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out CommandLineOptionDescriptor machineScopeDescriptor);
+            _ = validCommandOptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out CommandLineOptionDescriptor userScopeDescriptor);
+            ThrowInvalidCommandArgumentExceptionForArgumentMissing("'Set-Environment_Variable'", $"'{machineScopeDescriptor.Name} | {machineScopeDescriptor.AlternativeName}' or {userScopeDescriptor.Name} | {userScopeDescriptor.AlternativeName}'");
         }
 
         ThrowIfGreaterThan(invalidOptions.Count, 0);
