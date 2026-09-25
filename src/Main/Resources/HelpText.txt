@@ -1,4 +1,13 @@
-﻿usage: lit [alias] [options...]
+﻿---
+Version: 1
+Created: 2026-09-25T23:04:24+00:00
+Updated: 2026-09-25T23:04:24+00:00
+Author: BionicCode
+---
+--------------------------------------------------------------------------------
+
+
+usage: lit [alias] [options...]
 
 aliases:
   If no alias is provided, the default Windows Terminal profile is used.

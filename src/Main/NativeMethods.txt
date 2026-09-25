@@ -1,4 +1,13 @@
-﻿SendMessageTimeout
+﻿---
+Version: 1
+Created: 2026-09-25T23:04:24+00:00
+Updated: 2026-09-25T23:04:24+00:00
+Author: BionicCode
+---
+--------------------------------------------------------------------------------
+
+
+SendMessageTimeout
 WM_SETTINGCHANGE
 SMTO_ABORTIFHUNG
 HWND_BROADCAST
