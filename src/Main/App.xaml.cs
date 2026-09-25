@@ -107,12 +107,13 @@ public partial class App : Application
             AppSettingsKeys.UserConfigFileLocationKey, 
             _ => s_configFilePath,
             configPath => !File.Exists(configPath));
+        UserConfiguration userConfiguration = await ConfigurationReader.ReadConfigurationAsync(userConfigurationFilePath);
 
         string[] commandArgs = e?.Args ?? [];
         CommandLineCommand command;
         try
         {
-            CommandParserResult commandResult = await CommandLineArgumentParser.CreateCommandAsync(commandArgs, ValidCommandOptionsTable, userConfigurationFilePath);
+            CommandParserResult commandResult = CommandLineArgumentParser.CreateCommand(commandArgs, ValidCommandOptionsTable, userConfiguration);
             if (commandResult.HasErrors)
             {
                 string errorMessage = string.Join(Environment.NewLine, commandResult.ErrorMessages);
@@ -144,17 +145,19 @@ public partial class App : Application
         {
             case CommandLineOptionId.LaunchWindowsTerminal:
                 var launchTerminalAction = new LaunchWindowsTerminalAction();
-                exitMode = launchTerminalAction.Execute(command, s_applicationSettings);
+                exitMode = launchTerminalAction.Execute(command, s_applicationSettings, userConfiguration, idBasedValidCommandOptionsTable);
                 break;
             case CommandLineOptionId.GetOrSetConfigLocation:
                 var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
-                exitMode = getOrSetUserConfigLocationAction.Execute(command, s_applicationSettings);
+                exitMode = getOrSetUserConfigLocationAction.Execute(command, s_applicationSettings, userConfiguration, idBasedValidCommandOptionsTable);
                 break;
             case CommandLineOptionId.GetOrSetEnvironmentVariable:
                 var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
-                exitMode = getOrSetEnvironmentVariable.Execute(command, s_applicationSettings);
+                exitMode = getOrSetEnvironmentVariable.Execute(command, s_applicationSettings, userConfiguration, idBasedValidCommandOptionsTable);
                 break;           
             case CommandLineOptionId.Help:
+                var commandMetaInfoHandler = new ShowHelpAction();
+                exitMode = commandMetaInfoHandler.Execute(command, s_applicationSettings, userConfiguration, idBasedValidCommandOptionsTable);
                 await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable, userConfigurationFilePath);
                 break;
             case CommandLineOptionId.ListAliases:

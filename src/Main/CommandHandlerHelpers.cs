@@ -3,8 +3,14 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Drawing;
 using System.IO;
 using System.Security.Principal;
+using System.Text;
+using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 internal static class CommandHandlerHelpers
 {
@@ -124,5 +130,56 @@ internal static class CommandHandlerHelpers
         process.WaitForExit();
 
         return process.ExitCode;
+    }
+
+    public static void ShowInfoDialog(string message, string title = "lit.exe Help", string header = "lit.exe Command Line Help")
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(message);
+
+        var dialog = new InfoDialog
+        {
+            Title = title,
+            Header = header,
+            Body = message.ToString(),
+            Icon = Imaging.CreateBitmapSourceFromHIcon(
+                SystemIcons.Information.Handle,
+                Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions())
+        };
+
+        dialog.Show();
+    }
+
+    public static void ShowErrorDialog(string message, string title = "lit.exe Error", string header = "lit.exe Invalid Command Argument")
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(message);
+
+        var dialog = new InfoDialog
+        {
+            Title = title,
+            Header = header,
+            Body = message.ToString(),
+            Icon = Imaging.CreateBitmapSourceFromHIcon(
+                SystemIcons.Error.Handle,
+                Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions())
+        };
+
+        dialog.Show();
+    }
+
+    public static void ShowInteractionDialog(string message, ImageSource? dialogIcon, string title = "lit.exe Info", string header = "lit.exe Info")
+    {
+        ArgumentNullException.ThrowIfNullOrWhiteSpace(message);
+
+        var dialog = new InteractionDialog
+        {
+            Title = title,
+            Header = header,
+            Body = message.ToString(),
+            Icon = dialogIcon ?? Imaging.CreateBitmapSourceFromHIcon(SystemIcons.Information.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions())
+        };
+
+        dialog.Show();
     }
 }

@@ -1,6 +1,7 @@
 ﻿namespace Main;
 
 using System;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
@@ -9,9 +10,13 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 
-internal class GetOrSetUserConfigLocationAction : ICommandAction
+internal sealed class GetOrSetUserConfigLocationAction : CommandAction
 {
-    public CommandExitMode Execute(CommandLineCommand command, IApplicationSettings applicationSettings)
+    public GetOrSetUserConfigLocationAction() : base(CommandLineOptionId.GetOrSetConfigLocation)
+    {        
+    }
+
+    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userSettings, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
         ArgumentNullException.ThrowIfNull(applicationSettings);
 

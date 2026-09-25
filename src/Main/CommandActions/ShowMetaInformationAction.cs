@@ -1,58 +1,41 @@
 ﻿namespace Main;
 
 using System;
-using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Drawing;
-using System.Security;
+using System.Collections.Immutable;
 using System.Text;
-using System.Windows;
-using System.Windows.Interop;
-using System.Windows.Media.Imaging;
-using Microsoft.VisualBasic.FileIO;
-using YamlDotNet.Core.Tokens;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
-internal static class CommandHandler
+internal sealed class ShowHelpAction : CommandAction
 {
-    private const int LineIndentation = 4;
-    private const int Padding = 4;
-
-    public static  CommandExitMode HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
-    {
-        ArgumentNullException.ThrowIfNull(applicationSettings);
-
-        switch (command.Mode)
-        {
-            case CommandLineOptionId.LaunchWindowsTerminal:
-                var launchTerminalAction = new LaunchWindowsTerminalAction();
-                return launchTerminalAction.Execute(command, applicationSettings);
-            case CommandLineOptionId.GetOrSetConfigLocation:
-                var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
-                return getOrSetUserConfigLocationAction.Execute(command, applicationSettings);
-            case CommandLineOptionId.GetOrSetEnvironmentVariable:
-                var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
-                return getOrSetEnvironmentVariable.Execute(command, applicationSettings);
-            default:
-                throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
-        }
+    public ShowHelpAction() : base(CommandLineOptionId.Help)
+    {        
     }
 
-    
+    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userConfiguration, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
+        ShowHelp(validCommandOptionsTable, userConfiguration);
+        return CommandExitMode.Auto;
+    }
 
-    public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
+    private static void ShowHelp(IReadOnlyDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validOptionsTable, UserConfiguration userConfiguration)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
-        UserConfiguration configuration = await ConfigurationReader.ReadConfigurationAsync(userConfigurationFilePath);
-        var helpMessageBuilder = new StringBuilder();
+        StringBuilder helpMessageBuilder = new StringBuilder()
+            .AppendLine("This application is a command line utility for launching a Windows Terminal tab or")
+            .AppendLine("instance from the Windows Explorer's address bar with a specified Windows Terminal")
+            .AppendLine("profile. The terminal's working directory is set to the path of the currently")
+            .AppendLine("navigated Windows Explorer folder.")
+            .AppendLine()
+            .AppendLine("For more information, please visit the GitHub repository:")
+            .AppendLine("https://github.com/BionicCode/windows-terminal-launcher")
+            .AppendLine();
+
         CreateUsageMessage(helpMessageBuilder);
-        helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
+        helpMessageBuilder = CreateAliasesMessage(userConfiguration, helpMessageBuilder);
         helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
 
-        ShowInfoDialog(helpMessageBuilder);
+        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
     }
 
     public static async Task ShowAliasesAsync(string userConfigurationFilePath)
@@ -61,20 +44,10 @@ internal static class CommandHandler
         var helpMessageBuilder = new StringBuilder();
         helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
 
-        ShowInfoDialog(helpMessageBuilder);
+        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
     }
 
-    public static void ShowOptions(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable)
-    {
-        ArgumentNullException.ThrowIfNull(validOptionsTable);
-
-        var helpMessageBuilder = new StringBuilder();
-        helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
-
-        ShowInfoDialog(helpMessageBuilder);
-    }
-
-    private static StringBuilder CreateOptionsMessage(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, StringBuilder messageBuilder)
+    private static StringBuilder CreateOptionsMessage(IReadOnlyDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validOptionsTable, StringBuilder messageBuilder)
     {
         _ = messageBuilder.AppendLine()
             .AppendLine("Options:");
@@ -109,7 +82,7 @@ internal static class CommandHandler
             cell3Padding = maxKindLength - descriptor.Kind.ToDisplayString().Length;
             _ = messageBuilder.Append(' ', LineIndentation);
             if (descriptor.HasAlternativeName)
-            { 
+            {
                 _ = messageBuilder.AppendJoin(optionsSeparator, descriptor.Name, descriptor.AlternativeName);
             }
             else
@@ -266,12 +239,25 @@ internal static class CommandHandler
         .Append(' ', LineIndentation)
         .AppendLine("(--p | --print)")
         .AppendLine();
+}
 
-    public static void ShowError(string message) => ShowErrorDialog(message ?? "An unknown error occurred.");
-
-    private static void ShowInfoDialog(StringBuilder messageBuilder, string title = "lit.exe Help", string header = "lit.exe Command Line Help")
+internal sealed class ShowVersionAction : CommandAction
+{
+    public ShowVersionAction() : base(CommandLineOptionId.Help)
     {
-        messageBuilder = new StringBuilder()
+    }
+
+    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userConfiguration, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
+        ShowVersion(validCommandOptionsTable, userConfiguration);
+        return CommandExitMode.Auto;
+    }
+
+    private static void ShowHelp(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, UserConfiguration userConfiguration)
+    {
+        ArgumentNullException.ThrowIfNull(validOptionsTable);
+
+        StringBuilder helpMessageBuilder = new StringBuilder()
             .AppendLine("This application is a command line utility for launching a Windows Terminal tab or")
             .AppendLine("instance from the Windows Explorer's address bar with a specified Windows Terminal")
             .AppendLine("profile. The terminal's working directory is set to the path of the currently")
@@ -279,35 +265,12 @@ internal static class CommandHandler
             .AppendLine()
             .AppendLine("For more information, please visit the GitHub repository:")
             .AppendLine("https://github.com/BionicCode/windows-terminal-launcher")
-            .AppendLine()
-            .Append(messageBuilder);
-        var dialog = new InfoDialog
-        {
-            Title = title,
-            Header = header,
-            Body = messageBuilder.ToString(),
-            Icon = Imaging.CreateBitmapSourceFromHIcon(
-                SystemIcons.Information.Handle,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions())
-        };
+            .AppendLine();
 
-        dialog.Show();
-    }
+        CreateUsageMessage(helpMessageBuilder);
+        helpMessageBuilder = CreateAliasesMessage(userConfiguration, helpMessageBuilder);
+        helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
 
-    private static void ShowErrorDialog(string message, string title = "lit.exe Error", string header = "lit.exe Invalid Command Argument")
-    {
-        var dialog = new InfoDialog
-        {
-            Title = title,
-            Header = header,
-            Body = message.ToString(),
-            Icon = Imaging.CreateBitmapSourceFromHIcon(
-                SystemIcons.Error.Handle,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions())
-        };
-
-        dialog.Show();
+        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
     }
 }

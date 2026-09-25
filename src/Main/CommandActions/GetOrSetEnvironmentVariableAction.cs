@@ -13,13 +13,17 @@ using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
 
-internal class GetOrSetEnvironmentVariableAction : ICommandAction
+internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
 {
     private const string VariableName_PATH = "PATH";
     private const string UserEnvironmentRegistryKey = "Environment";
     private const string SystemEnvironmentRegistryKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
 
-    public CommandExitMode Execute(CommandLineCommand command, IApplicationSettings applicationSettings)
+    public GetOrSetEnvironmentVariableAction() : base(CommandLineOptionId.GetOrSetEnvironmentVariable) 
+    {        
+    }
+
+    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userSettings, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
         if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.GetOrSetEnvironmentVariable, out CommandLineOption variableNameOption)
             || (!command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeMachine)

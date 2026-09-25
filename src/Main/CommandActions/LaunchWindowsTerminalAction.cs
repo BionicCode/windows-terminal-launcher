@@ -1,14 +1,17 @@
 ﻿namespace Main;
 
 using System;
+using System.Collections.Immutable;
 using System.Diagnostics;
 
-internal class LaunchWindowsTerminalAction : ICommandAction
+internal sealed class LaunchWindowsTerminalAction : CommandAction
 {
-    public CommandExitMode Execute(CommandLineCommand command, IApplicationSettings applicationSettings)
+    public LaunchWindowsTerminalAction() : base(CommandLineOptionId.LaunchWindowsTerminal)
     {
-        ExceptionHelpers.ThrowArgumentExceptionIfWrongCommandType(command.CommandIdProviderOption.Descriptor.OptionType, CommandLineOptionId.LaunchWindowsTerminal)
+    }
 
+    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userSettings, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
         LaunchTerminalWithAlias(command);
         return CommandExitMode.ShutdownRequired;
     }

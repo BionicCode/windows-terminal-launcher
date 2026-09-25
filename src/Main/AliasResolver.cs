@@ -4,7 +4,7 @@ using System.Configuration;
 
 internal static class AliasResolver
 {
-    public static async Task<AliasResolverResult> CreateAliasAsync(string aliasToResolve, Configuration configuration)
+    public static AliasResolverResult CreateAlias(string aliasToResolve, UserConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
 

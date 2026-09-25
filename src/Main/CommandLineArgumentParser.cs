@@ -15,14 +15,14 @@ internal static class CommandLineArgumentParser
     /// </summary>
     /// <param name="rawArguments">The command line arguments to parse.</param>
     /// <param name="validOptions">The lookup table of valid command options.</param>
-    /// <param name="configFilePath">The path to the user configuration YAML file.</param>
+    /// <param name="userConfiguration"></param>
     /// <returns>A <see cref="CommandParserResult"/> object containing the parsed <see cref="CommandLineCommand"/> and a set of error messages if errors have occurred.</returns>
     /// <exception cref="InvalidCommandArgumentException">Thrown when an invalid command argument is encountered.</exception>
     /// <remarks>Expects a command syntax of the form: <c>lit [alias] [options...]</c></remarks>
-    public async static Task<CommandParserResult> CreateCommandAsync(
+    public static CommandParserResult CreateCommand(
         string[]? rawArguments, 
         IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptions, 
-        string configFilePath)
+        UserConfiguration userConfiguration)
     {
         ArgumentNullException.ThrowIfNull(rawArguments);
         ArgumentNullException.ThrowIfNull(validOptions);
@@ -110,26 +110,25 @@ internal static class CommandLineArgumentParser
             .GetValueOrDefault(CommandLineOptionId.LaunchWindowsTerminal)
             .Value;
         var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
-        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(configFilePath);
-        AliasResolverResult providedProfileAliasLookupResult = await AliasResolver.CreateAliasAsync(providedTerminalProfile, configuration);
+        AliasResolverResult providedProfileAliasLookupResult = AliasResolver.CreateAlias(providedTerminalProfile, userConfiguration);
         if (providedProfileAliasLookupResult.HasError)
         {
             return new CommandParserResult(CommandLineCommand.Default, [providedProfileAliasLookupResult.ErrorMessage]);
         }
 
-        AliasResolverResult defaultProfileLookupResult = await AliasResolver.CreateAliasAsync(configuration.DefaultProfileValue, configuration);
+        AliasResolverResult defaultProfileLookupResult = AliasResolver.CreateAlias(userConfiguration.DefaultProfileValue, userConfiguration);
         if (defaultProfileLookupResult.HasError)
         {
             return new CommandParserResult(CommandLineCommand.Default, [defaultProfileLookupResult.ErrorMessage]);
         }
 
-        CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
+        CommandContext context = CreateCommandContext(userConfiguration, immutableOptionsTable);
         var arguments = new CommandArguments(providedProfileAliasLookupResult.TerminalProfile, defaultProfileLookupResult.TerminalProfile, immutableOptionsTable);
         
         return new CommandParserResult(new CommandLineCommand(arguments, context), []);
     }
 
-    private static CommandContext CreateCommandContext(Configuration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)
+    private static CommandContext CreateCommandContext(UserConfiguration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)
     {
         ExecutionMode executionMode = options.ContainsKey(CommandLineOptionId.RunAsAdmin) 
             ? ExecutionMode.Admin 

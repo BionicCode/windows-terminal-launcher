@@ -2,7 +2,7 @@
 
 using System.Collections.Immutable;
 
-internal record Configuration(
+internal record UserConfiguration(
     ImmutableHashSet<TerminalProfile> TerminalProfiles, 
     ImmutableDictionary<string, TerminalProfile> TerminalProfileMap, 
     string DefaultProfileValue, 
