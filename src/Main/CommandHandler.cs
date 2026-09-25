@@ -20,66 +20,27 @@ internal static class CommandHandler
     private const int LineIndentation = 4;
     private const int Padding = 4;
 
-    public static void LaunchTerminalWithAlias(CommandLineCommand command)
+    public static  CommandExitMode HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
     {
-        bool isElevatedExeutionRequested = command.Context.ExecutionMode is ExecutionMode.Admin;
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "wt.exe",
-            UseShellExecute = isElevatedExeutionRequested,
-        };
+        ArgumentNullException.ThrowIfNull(applicationSettings);
 
-        if (isElevatedExeutionRequested)
+        switch (command.Mode)
         {
-            startInfo.Verb = "runas";
+            case CommandLineOptionId.LaunchWindowsTerminal:
+                var launchTerminalAction = new LaunchWindowsTerminalAction();
+                return launchTerminalAction.Execute(command, applicationSettings);
+            case CommandLineOptionId.GetOrSetConfigLocation:
+                var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
+                return getOrSetUserConfigLocationAction.Execute(command, applicationSettings);
+            case CommandLineOptionId.GetOrSetEnvironmentVariable:
+                var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
+                return getOrSetEnvironmentVariable.Execute(command, applicationSettings);
+            default:
+                throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
         }
-
-        // Control destination terminal window
-        string targetWindow = string.IsNullOrWhiteSpace(command.Context.LaunchMode)
-            ? LaunchModes.NewWindow
-            : command.Context.LaunchMode;
-        startInfo.ArgumentList.Add("-w");
-        startInfo.ArgumentList.Add(targetWindow);
-
-        // Control terminal profile. If ommitted, wt.exe uses the default profile.
-        string selectedTerminalProfile = command.Arguments.TerminalProfile.HasName
-            ? command.Arguments.TerminalProfile.Name
-            : command.Arguments.DefaultTerminalProfile.Name;
-        bool isProfileSpecified = !string.IsNullOrWhiteSpace(selectedTerminalProfile);
-        if (isProfileSpecified)
-        {
-            startInfo.ArgumentList.Add("-p");
-            startInfo.ArgumentList.Add(command.Arguments.TerminalProfile.Name);
-        }
-
-        // Control working directory.
-        // This will be the current directory of the Windows Explorer window
-        // that launched this application from its address bar.
-        startInfo.ArgumentList.Add("-d");
-        startInfo.ArgumentList.Add(Environment.CurrentDirectory);
-
-        using Process? process = Process.Start(startInfo);
     }
 
-    private static bool ContainsJoinedValue(
-    string currentValue,
-    string value,
-    string delimiter,
-    StringComparison comparison = StringComparison.Ordinal)
-    {
-        ReadOnlySpan<char> source = currentValue.AsSpan();
-        ReadOnlySpan<char> candidate = value.AsSpan();
-
-        foreach (Range range in source.Split(delimiter.AsSpan()))
-        {
-            if (source[range].Equals(candidate, comparison))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    
 
     public static async Task ShowHelpAsync(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, string userConfigurationFilePath)
     {
@@ -228,7 +189,7 @@ internal static class CommandHandler
         .AppendLine("[(-a | --admin)]")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
-        .AppendLine("[(-d | --destination) <destination-path>]")
+        .AppendLine("[(-w | --working-directory) <working-directory-path>]")
         .AppendLine()
         .Append(' ', LineIndentation)
         .AppendLine("Show the current location of the user configuration file:")
@@ -348,22 +309,5 @@ internal static class CommandHandler
         };
 
         dialog.Show();
-    }
-
-    internal static async Task<CommandExitMode> HandleMode(CommandLineCommand command, IApplicationSettings applicationSettings)
-    {
-        ArgumentNullException.ThrowIfNull(applicationSettings);
-
-        switch (command.Mode)
-        {
-            case CommandLineOptionId.GetOrSetConfigLocation:
-                var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
-                return getOrSetUserConfigLocationAction.Execute(command, applicationSettings);
-            case CommandLineOptionId.GetOrSetEnvironmentVariable:
-                var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
-                return getOrSetEnvironmentVariable.Execute(command, applicationSettings);
-            default:
-                throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
-        }
     }
 }

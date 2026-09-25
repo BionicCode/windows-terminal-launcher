@@ -8,6 +8,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using Microsoft.VisualBasic.FileIO;
 
@@ -57,35 +58,39 @@ public partial class App : Application
         table.Add("-d", destinationLocationOption);
         table.Add("--destination", destinationLocationOption);
 
-        var printOption = new CommandLineOptionDescriptor("--print", "-p", CommandLineOptionId.Print, CommandLineOptionKind.Flag, string.Empty, ["Print the specified value"], @"lit --config --print", IsOptional: false);
+        var workingDirectoryOption = new CommandLineOptionDescriptor("--working-directory", "-w", CommandLineOptionId.WorkingDirectory, CommandLineOptionKind.Value, string.Empty, ["Specify the working directory", "of the Windows Terminal instance"], @"lit --working-directory ""%USERPROFILE%/.lit""", IsOptional: true);
+        table.Add("-w", workingDirectoryOption);
+        table.Add("--working-directory", workingDirectoryOption);
+
+        var printOption = new CommandLineOptionDescriptor("--print", "-p", CommandLineOptionId.Print, CommandLineOptionKind.Flag, string.Empty, ["Print the specified workingDirectoryPath"], @"lit --config --print", IsOptional: false);
         table.Add("-p", printOption);
         table.Add("--print", printOption);
 
-        var userScopeOption = new CommandLineOptionDescriptor("--user", "-u", CommandLineOptionId.EnvironmentVariableScopeUser, CommandLineOptionKind.Flag, string.Empty, ["Specify the scope of the", "environment variable as 'user'"], @"lit --variable ""PATH"" --value ""C:\Folder"" --user --join", IsOptional: false);
+        var userScopeOption = new CommandLineOptionDescriptor("--user", "-u", CommandLineOptionId.EnvironmentVariableScopeUser, CommandLineOptionKind.Flag, string.Empty, ["Specify the scope of the", "environment variable as 'user'"], @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --user --join", IsOptional: false);
         table.Add("-u", userScopeOption);
         table.Add("--user", userScopeOption);
 
-        var systemScopeOption = new CommandLineOptionDescriptor("--machine", "-m", CommandLineOptionId.EnvironmentVariableScopeMachine, CommandLineOptionKind.Flag, string.Empty, ["Specify the scope of the", "environment variable as 'system'"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        var systemScopeOption = new CommandLineOptionDescriptor("--machine", "-m", CommandLineOptionId.EnvironmentVariableScopeMachine, CommandLineOptionKind.Flag, string.Empty, ["Specify the scope of the", "environment variable as 'system'"], @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join", IsOptional: false);
         table.Add("-m", systemScopeOption);
         table.Add("--machine", systemScopeOption);
 
-        var variableScopeOption = new CommandLineOptionDescriptor("--variable", "--var", CommandLineOptionId.GetOrSetEnvironmentVariable, CommandLineOptionKind.ModeAndValue, "GetOrSet-Environment-Variable", ["Set or create an environment variable"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        var variableScopeOption = new CommandLineOptionDescriptor("--variable", "--var", CommandLineOptionId.GetOrSetEnvironmentVariable, CommandLineOptionKind.ModeAndValue, "GetOrSet-Environment-Variable", ["Set or create an environment variable"], @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join", IsOptional: false);
         table.Add("--var", variableScopeOption);
         table.Add("--variable", variableScopeOption);
 
-        var variableValueOption = new CommandLineOptionDescriptor("--value", "--val", CommandLineOptionId.EnvironmentVariableValue, CommandLineOptionKind.Value, string.Empty, ["Specify the new value of", "the environment variable"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
-        table.Add("--value", variableValueOption);
+        var variableValueOption = new CommandLineOptionDescriptor("--workingDirectoryPath", "--val", CommandLineOptionId.EnvironmentVariableValue, CommandLineOptionKind.Value, string.Empty, ["Specify the new workingDirectoryPath of", "the environment variable"], @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join", IsOptional: false);
+        table.Add("--workingDirectoryPath", variableValueOption);
         table.Add("--val", variableValueOption);
 
-        var joinWriteModeOption = new CommandLineOptionDescriptor("--join", "-j", CommandLineOptionId.EnvironmentVariableWriteModeJoin, CommandLineOptionKind.Flag, string.Empty, ["Specify that the new value of", "the environment variable is appended", "to the existing value"], @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join", IsOptional: false);
+        var joinWriteModeOption = new CommandLineOptionDescriptor("--join", "-j", CommandLineOptionId.EnvironmentVariableWriteModeJoin, CommandLineOptionKind.Flag, string.Empty, ["Specify that the new workingDirectoryPath of", "the environment variable is appended", "to the existing workingDirectoryPath"], @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join", IsOptional: false);
         table.Add("-j", joinWriteModeOption);
         table.Add("--join", joinWriteModeOption);
 
-        var replaceWriteModeOption = new CommandLineOptionDescriptor("--replace", "-r", CommandLineOptionId.EnvironmentVariableWriteModeReplace, CommandLineOptionKind.Flag, string.Empty, ["Specify that the new value of", "the environment variable replaces", "the existing value"], @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace", IsOptional: false);
+        var replaceWriteModeOption = new CommandLineOptionDescriptor("--replace", "-r", CommandLineOptionId.EnvironmentVariableWriteModeReplace, CommandLineOptionKind.Flag, string.Empty, ["Specify that the new workingDirectoryPath of", "the environment variable replaces", "the existing workingDirectoryPath"], @"lit --variable ""TEMP"" --workingDirectoryPath ""C:\Folder"" --machine --replace", IsOptional: false);
         table.Add("-r", replaceWriteModeOption);
         table.Add("--replace", replaceWriteModeOption);
 
-        var delimiterOption = new CommandLineOptionDescriptor("--delimiter", "--del", CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, CommandLineOptionKind.Value, string.Empty, [$"Specifies the delimiter used to join", "the values of the environment variable.", "The default is the path separator ';'"], @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace --delimiter "";""", IsOptional: true);
+        var delimiterOption = new CommandLineOptionDescriptor("--delimiter", "--del", CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, CommandLineOptionKind.Value, string.Empty, [$"Specifies the delimiter used to join", "the values of the environment variable.", "The default is the path separator ';'"], @"lit --variable ""TEMP"" --workingDirectoryPath ""C:\Folder"" --machine --replace --delimiter "";""", IsOptional: true);
         table.Add("--del", delimiterOption);
         table.Add("--delimiter", delimiterOption);
 
@@ -131,28 +136,37 @@ public partial class App : Application
             CommandHandler.ShowError(errorMessage);
         }
 
-        switch (command.Arguments.OptionsTable)
-        {
-            case var _ when command.HasMode:
-                CommandExitMode exitMode = await CommandHandler.HandleMode(command, s_applicationSettings);
-                if (exitMode is CommandExitMode.ShutdownRequired)
-                {
-                    Shutdown();
-                }
+        // Only call for compatiobility. This is essentially a no-op operation
+        base.OnStartup(e);
 
+        CommandExitMode exitMode = CommandExitMode.Undefined;
+        switch (command.Mode)
+        {
+            case CommandLineOptionId.LaunchWindowsTerminal:
+                var launchTerminalAction = new LaunchWindowsTerminalAction();
+                exitMode = launchTerminalAction.Execute(command, s_applicationSettings);
                 break;
-            case var options when options.ContainsKey(CommandLineOptionId.Help):
-                base.OnStartup(e);
+            case CommandLineOptionId.GetOrSetConfigLocation:
+                var getOrSetUserConfigLocationAction = new GetOrSetUserConfigLocationAction();
+                exitMode = getOrSetUserConfigLocationAction.Execute(command, s_applicationSettings);
+                break;
+            case CommandLineOptionId.GetOrSetEnvironmentVariable:
+                var getOrSetEnvironmentVariable = new GetOrSetEnvironmentVariableAction();
+                exitMode = getOrSetEnvironmentVariable.Execute(command, s_applicationSettings);
+                break;           
+            case CommandLineOptionId.Help:
                 await CommandHandler.ShowHelpAsync(ValidCommandOptionsTable, userConfigurationFilePath);
                 break;
-            case var options when options.ContainsKey(CommandLineOptionId.ListAliases):
-                base.OnStartup(e);
+            case CommandLineOptionId.ListAliases:
                 await CommandHandler.ShowAliasesAsync(userConfigurationFilePath);
                 break;
             default:
-                CommandHandler.LaunchTerminalWithAlias(command);
-                Shutdown();
-                break;
+                throw new NotImplementedException($"The mode '{Enum.GetName(command.Mode)} is currently not supported.");
+        }
+
+        if (exitMode is CommandExitMode.ShutdownRequired)
+        {
+            Shutdown();
         }
     }
 }
@@ -177,7 +191,7 @@ internal static class CommandValidator
                 case CommandLineOptionId.GetOrSetEnvironmentVariable:
                     return ValidateGetOrSetEnvironmentVariableCommandSyntax(command, ref modeOption, option, validCommandOptionsTable);
                 case CommandLineOptionId.LaunchWindowsTerminal:
-                    break;
+                    return ValidateLaunchWindowsTerminalCommandSyntax(command, ref modeOption, option, validCommandOptionsTable
                 case CommandLineOptionId.Help:
                     break;
                 case CommandLineOptionId.Version:
@@ -208,12 +222,65 @@ internal static class CommandValidator
         }
     }
 
+    private static ValidationResult ValidateLaunchWindowsTerminalCommandSyntax(CommandLineCommand command, ref CommandLineOption? modeOption, CommandLineOption option, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
+    {
+        ThrowIfCommandTypeIsWrong(CommandLineOptionId.LaunchWindowsTerminal, command);
+
+        if (CreateErrorMessageIfModeAlreadySet(ref modeOption, out string errorMessage))
+        {
+            return new ValidationResult([errorMessage]);
+        }
+
+        var invalidOptions = new HashSet<CommandLineOptionId>(command.Arguments.OptionsTable.Keys);
+        _ = invalidOptions.Remove(CommandLineOptionId.LaunchWindowsTerminal);
+
+        List<string> errorMessages = [];
+
+        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.WorkingDirectory, out CommandLineOption workingDirectoryOption))
+        {
+
+            string workingDirectoryPath = workingDirectoryOption.Value;
+            if (string.IsNullOrWhiteSpace(workingDirectoryPath))
+            {
+                errorMessage = $"The working directory path provided for the option '{workingDirectoryOption.Descriptor.Name} | {workingDirectoryOption.Descriptor.AlternativeName}' is invalid. Found an empty string.'";
+                errorMessages.Add(errorMessage);
+            }
+            else
+            {
+                if (CommandHandlerHelpers.IsFilePath(workingDirectoryPath))
+                {
+                    errorMessage = $"The working directory provided for the option '{workingDirectoryOption.Descriptor.Name} | {workingDirectoryOption.Descriptor.AlternativeName}' must be a directory. Found file: '{workingDirectoryPath}'.";
+                    errorMessages.Add(errorMessage);
+                }
+
+                if (!Path.IsPathFullyQualified((workingDirectoryPath)))
+                {
+                    errorMessage = $"The working directory provided for the option '{workingDirectoryOption.Descriptor.Name} | {workingDirectoryOption.Descriptor.AlternativeName}' must be a fully qualified directory. Found a relative path: '{workingDirectoryPath}'.";
+                    errorMessages.Add(errorMessage);
+                }
+            }
+
+            _ = invalidOptions.Remove(CommandLineOptionId.WorkingDirectory);
+        }
+
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.RunAsAdmin))
+        {
+            _ = invalidOptions.Remove(CommandLineOptionId.RunAsAdmin);
+        }
+
+        if (CreateErrorMessageIfGreaterThan(invalidOptions.Count, 0, command.Name, out errorMessage))
+        {
+            errorMessages.Add(errorMessage);
+        }
+
+        return errorMessage.Any()
+            ? new ValidationResult(errorMessages.ToImmutableArray())
+            : ValidationResult.ValidResult;
+    }
+
     private static ValidationResult ValidateGetOrSetEnvironmentVariableCommandSyntax(CommandLineCommand command, ref CommandLineOption? modeOption, CommandLineOption option, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
-        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.GetOrSetEnvironmentVariable, out CommandLineOption variableNameOption))
-        {
-            throw new ArgumentException($"Invalid argument '{nameof(command)}'. Validator expected a '{command.Name}' command");
-        }
+        ThrowIfCommandTypeIsWrong(CommandLineOptionId.GetOrSetEnvironmentVariable, command);
 
         if (CreateErrorMessageIfModeAlreadySet(ref modeOption, out string errorMessage))
         {
@@ -227,11 +294,11 @@ internal static class CommandValidator
 
         List<string> errorMessages = [];
                 
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeMachine, out _))
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeMachine))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeMachine);
         }
-        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableScopeUser, out _))
+        else if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeUser))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableScopeUser);
         }
@@ -243,7 +310,7 @@ internal static class CommandValidator
             errorMessages.Add(errorMessage);
         }
 
-        bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out _);
+        bool isPrintOptionProvided = command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print);
         if (isPrintOptionProvided)
         {
             _ = invalidOptions.Remove(CommandLineOptionId.Print);
@@ -258,18 +325,19 @@ internal static class CommandValidator
                 : ValidationResult.ValidResult;
         }
 
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableValue, out _))
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableValue))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableValue);
         }
 
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.FoldPath, out _))
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.FoldPath))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.FoldPath);
         }
 
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out _))
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter))
         {
+            CommandLineOption variableNameOption = command.CommandIdProviderOption;
             if (variableNameOption.Value.Equals(VariableName_PATH, StringComparison.OrdinalIgnoreCase))
             {
                 errorMessage = $"No custom delimiter for the '{VariableName_PATH}' environment variable allowed.";
@@ -279,11 +347,11 @@ internal static class CommandValidator
             _ = invalidOptions.Remove(CommandLineOptionId.FoldPath);
         }
 
-        if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoin, out _))
+        if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableWriteModeJoin);
         }
-        else if (command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeReplace, out _))
+        else if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeReplace))
         {
             _ = invalidOptions.Remove(CommandLineOptionId.EnvironmentVariableWriteModeReplace);
         }
@@ -312,10 +380,7 @@ internal static class CommandValidator
 
     private static ValidationResult ValidateGetOrSetConfigLocationCommandSyntax(CommandLineCommand command, ref CommandLineOption? modeOption, CommandLineOption option, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
-        if (!command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.GetOrSetConfigLocation, out _))
-        {
-            throw new ArgumentException($"Invalid argument '{nameof(command)}'. Validator expected a '{command.Name}' command");
-        }
+        ThrowIfCommandTypeIsWrong(CommandLineOptionId.GetOrSetConfigLocation, command);
 
         if (CreateErrorMessageIfModeAlreadySet(ref modeOption, out string errorMessage))
         {
@@ -329,7 +394,7 @@ internal static class CommandValidator
 
         List<string> errorMessages = [];
 
-        bool isPrintOptionProvided = command.Arguments.OptionsTable.TryGetValue(CommandLineOptionId.Print, out _);
+        bool isPrintOptionProvided = command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print);
         if (isPrintOptionProvided)
         {
             _ = invalidOptions.Remove(CommandLineOptionId.Print);
@@ -351,7 +416,13 @@ internal static class CommandValidator
             string sourcePath = sourcePathOption.Value;
             if (string.IsNullOrWhiteSpace(sourcePath))
             {
-                errorMessage = $"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.";
+                errorMessage = $"Invalid command argument. A '{sourcePathOption.Descriptor.Name} | {sourcePathOption.Descriptor.AlternativeName}' option was provided but no path was  specified.";
+                errorMessages.Add(errorMessage);
+            }
+
+            if (!Path.IsPathFullyQualified((sourcePath)))
+            {
+                errorMessage = $"The source path provided for the option '{sourcePathOption.Descriptor.Name} | {sourcePathOption.Descriptor.AlternativeName}' must be a fully qualified file path. Found a relative path: '{sourcePath}'.";
                 errorMessages.Add(errorMessage);
             }
 
@@ -364,7 +435,7 @@ internal static class CommandValidator
             if (!Path.HasExtension(sourcePath)
                 || !(Path.GetExtension(sourcePath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(sourcePath).Equals(".yml", StringComparison.OrdinalIgnoreCase)))
             {
-                errorMessage = $"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.";
+                errorMessage = $"Invalid path argument. A '{sourcePathOption.Descriptor.Name} | {sourcePathOption.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.";
                 errorMessages.Add(errorMessage);
             }
         }
@@ -376,7 +447,13 @@ internal static class CommandValidator
             string destinationPath = destinationPathOption.Value;
             if (string.IsNullOrWhiteSpace(destinationPath))
             {
-                errorMessage = $"Invalid command argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but no path value.";
+                errorMessage = $"Invalid command argument. A '{destinationPathOption.Descriptor.Name} | {destinationPathOption.Descriptor.AlternativeName}' option was provided but no path was specified.";
+                errorMessages.Add(errorMessage);
+            }
+
+            if (!Path.IsPathFullyQualified((destinationPath)))
+            {
+                errorMessage = $"The source path provided for the option '{destinationPathOption.Descriptor.Name} | {destinationPathOption.Descriptor.AlternativeName}' must be a fully qualified file path. Found a relative path: '{destinationPath}'.";
                 errorMessages.Add(errorMessage);
             }
 
@@ -386,7 +463,7 @@ internal static class CommandValidator
                 && (!Path.HasExtension(destinationPath)
                 || !(Path.GetExtension(destinationPath).Equals(".yaml", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(destinationPath).Equals(".yml", StringComparison.OrdinalIgnoreCase))))
             {
-                errorMessage = $"Invalid path argument. A '{option.Descriptor.Name} | {option.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.";
+                errorMessage = $"Invalid path argument. A '{destinationPathOption.Descriptor.Name} | {destinationPathOption.Descriptor.AlternativeName}' option was provided but the file extension does not match '.yaml' or '.yml'.";
                 errorMessages.Add(errorMessage);
             }
         }
@@ -439,5 +516,13 @@ internal static class CommandValidator
         }
 
         return false;
+    }
+
+    private static void ThrowIfCommandTypeIsWrong(CommandLineOptionId expectedCommandType, CommandLineCommand command, [CallerArgumentExpression(nameof(command))] string? paramName = null)
+    {
+        if (!command.Arguments.OptionsTable.TryGetValue(expectedCommandType, out _))
+        {
+            throw new ArgumentException($"Invalid argument '{paramName}'. Validator expected a '{command.Name}' command of command type '{Enum.GetName(expectedCommandType)}'. But found: '{command.CommandIdProviderOption.Descriptor.OptionType}'.", paramName);
+        }
     }
 }

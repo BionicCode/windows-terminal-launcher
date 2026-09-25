@@ -14,6 +14,7 @@ internal enum CommandLineOptionId
     GetOrSetConfigLocation,
     SourcePath,
     DestinationPath,
+    WorkingDirectory,
     /// <summary>
     /// Mode option.
     /// </summary>

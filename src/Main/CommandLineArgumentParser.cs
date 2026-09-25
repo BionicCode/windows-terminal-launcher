@@ -51,7 +51,7 @@ internal static class CommandLineArgumentParser
                         ? rawArguments[++index]
                         : string.Empty;
 
-                    if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath)
+                    if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath or CommandLineOptionId.WorkingDirectory)
                     {
                         if (!CommandHandlerHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
                         {
