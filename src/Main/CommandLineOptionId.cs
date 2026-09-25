@@ -3,6 +3,7 @@
 internal enum CommandLineOptionId
 {
     Undefined = 0,
+    LaunchWindowsTerminal,
     Help,
     Version,
     ListAliases,

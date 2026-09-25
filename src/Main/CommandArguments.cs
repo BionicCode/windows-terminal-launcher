@@ -12,8 +12,7 @@ internal readonly record struct CommandArguments(
 
     private readonly WriteOnce<bool> _hasMode = new();
     private readonly WriteOnce<CommandLineOptionId> _mode = new();
-    public bool HasAlias => TerminalProfile is not null && !string.IsNullOrWhiteSpace(TerminalProfile.Name);
-    public bool HasDefaultAlias => DefaultTerminalProfile is not null && !string.IsNullOrWhiteSpace(DefaultTerminalProfile.Name);
+    public bool HasAlias => OptionsTable.ContainsKey(CommandLineOptionId.LaunchWindowsTerminal);
     public bool HasOptions => OptionsTable is not null && OptionsTable.Count > 0;
     public bool HasMode => _hasMode.IsSet
         ? _hasMode

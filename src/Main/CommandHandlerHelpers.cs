@@ -1,6 +1,8 @@
 ﻿namespace Main;
 
+using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Security.Principal;
 
@@ -21,6 +23,64 @@ internal static class CommandHandlerHelpers
         FileAttributes attributes = File.GetAttributes(path);
 
         return !attributes.HasFlag(FileAttributes.Directory);
+    }
+
+    public static bool TryNormalizeWindowsPath(
+    string path,
+    [NotNullWhen(true)] out string? normalizedPath)
+    {
+        normalizedPath = null;
+
+        if (string.IsNullOrWhiteSpace(path)
+            || !Path.IsPathFullyQualified(path))
+        {
+            return false;
+        }
+
+        try
+        {
+            string fullPath = Path.GetFullPath(path);
+
+            if (!IsLexicallyValidPath(fullPath))
+            {
+                return false;
+            }
+
+            normalizedPath = fullPath;
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        catch (PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    public static bool IsLexicallyValidPath(string path)
+    {
+        // Check for invalid characters
+        SearchValues<char> invalidPathChars = SearchValues.Create(Path.GetInvalidPathChars());
+        if (path.ContainsAny(invalidPathChars))
+        {
+            return false;
+        }
+
+        // Optional: Check for invalid file name characters in segments
+        if (!CommandHandlerHelpers.IsFilePath(path))
+        {
+            return true;
+        }
+
+        string fileName = CommandHandlerHelpers.GetFileNameIfFile(path);
+        SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
+        return !fileName.ContainsAny(invalidNameChars);
     }
 
     public static bool IsCurrentProcessElevated()

@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using YamlDotNet.Core.Tokens;
 
 internal static class CommandLineArgumentParser
 {
@@ -14,10 +15,11 @@ internal static class CommandLineArgumentParser
     /// </summary>
     /// <param name="rawArguments">The command line arguments to parse.</param>
     /// <param name="validOptions">The lookup table of valid command options.</param>
-    /// <returns>A <see cref="CommandLineCommand"/> object containing the parsed command arguments like Windows Terminal profile alias and command options.</returns>
+    /// <param name="configFilePath">The path to the user configuration YAML file.</param>
+    /// <returns>A <see cref="CommandParserResult"/> object containing the parsed <see cref="CommandLineCommand"/> and a set of error messages if errors have occurred.</returns>
     /// <exception cref="InvalidCommandArgumentException">Thrown when an invalid command argument is encountered.</exception>
     /// <remarks>Expects a command syntax of the form: <c>lit [alias] [options...]</c></remarks>
-    public async static Task<CommandLineCommand> CreateCommandAsync(
+    public async static Task<CommandParserResult> CreateCommandAsync(
         string[]? rawArguments, 
         IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptions, 
         string configFilePath)
@@ -26,7 +28,6 @@ internal static class CommandLineArgumentParser
         ArgumentNullException.ThrowIfNull(validOptions);
 
         var options = new Dictionary<CommandLineOptionId, CommandLineOption>(CommandLineOptionIdComparer.Instance);
-        string providedTerminalProfile = string.Empty;
         if (rawArguments.Length > 0)
         {
             for (int index = 0; index < rawArguments.Length; index++)
@@ -42,7 +43,8 @@ internal static class CommandLineArgumentParser
                 {
                     if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
                     {
-                        throw new InvalidCommandArgumentException($"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.");
+                        string errorMessage = $"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.";
+                        return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
 
                     string value = optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue
@@ -51,97 +53,80 @@ internal static class CommandLineArgumentParser
 
                     if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath)
                     {
-                        if (!TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                        if (!CommandHandlerHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
                         {
-                            throw new InvalidCommandArgumentException($"Invalid source path argument at argument index '{index}'. The path is malformed.");
+                            string errorMessage = $"Invalid source path argument at argument index '{index}'. The path is malformed.";
+                            return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                         }
 
                         value = normalizedSourcePath;
                     }
 
                     var option = new CommandLineOption(optionDescriptor, value);
-                    options.Add(optionDescriptor.OptionType, option);
+                    if (!options.TryAdd(optionDescriptor.OptionType, option))
+                    {
+                        string errorMessage = $"Duplicate command option. The option '{optionDescriptor.OptionType}' can be specified only once.";
+                        return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+                    }
                 }
                 else
                 {
-                    // Only one alias can be specified, so if we already have an alias, throw an exception
-                    if (!string.IsNullOrEmpty(providedTerminalProfile))
+                    // Arguments without leading '-' or '--' are treated as Windows Terminal profile name alias
+                    if (!validOptions.TryGetValue(CommandLineOption.AliasOptionKey, out CommandLineOptionDescriptor optionDescriptor))
                     {
-                        throw new InvalidCommandArgumentException($"Malformed command line arguments.{Environment.NewLine}Only one alias argument can be specified.");
+                        string errorMessage = $"Command option '{CommandLineOption.AliasOptionKey}' has not been registered properly.";
+                        throw new InvalidOperationException(errorMessage);
                     }
 
-                    providedTerminalProfile = arg;
-
+                    var option = new CommandLineOption(optionDescriptor, arg);
+                    if (!options.TryAdd(optionDescriptor.OptionType, option))
+                    {
+                        string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once.";
+                        return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+                    }
                 }
             }
         }
-
-        var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
-        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(configFilePath);
-        TerminalProfile providedProfile = await AliasResolver.CreateAliasAsync(providedTerminalProfile, configuration);
-        TerminalProfile defaultProfile = await AliasResolver.CreateAliasAsync(configuration.DefaultProfileValue, configuration);
-        CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
-        var arguments = new CommandArguments(providedProfile, defaultProfile, immutableOptionsTable);
-        
-        return new CommandLineCommand(arguments, context);
-    }
-
-    private static bool TryNormalizeWindowsPath(
-    string path,
-    [NotNullWhen(true)] out string? normalizedPath)
-    {
-        normalizedPath = null;
-
-        if (string.IsNullOrWhiteSpace(path)
-            || !Path.IsPathFullyQualified(path))
+        else
         {
-            return false;
-        }
+            // Ensure a command without any arguments is executed as default 'Launch-Windows-Terminal' command
+            // that uses the current workiing directory and the terminal's default profile
 
-        try
-        {
-            string fullPath = Path.GetFullPath(path);
-
-            if (!IsLexicallyValidPath(fullPath))
+            if (!validOptions.TryGetValue(CommandLineOption.AliasOptionKey, out CommandLineOptionDescriptor optionDescriptor))
             {
-                return false;
+                string errorMessage = $"Command option '{CommandLineOption.AliasOptionKey}' has not been registered properly.";
+                throw new InvalidOperationException(errorMessage);
             }
 
-            normalizedPath = fullPath;
-            return true;
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (NotSupportedException)
-        {
-            return false;
-        }
-        catch (PathTooLongException)
-        {
-            return false;
-        }
-    }
-
-    private static bool IsLexicallyValidPath(string path)
-    {
-        // Check for invalid characters
-        SearchValues<char> invalidPathChars = SearchValues.Create(Path.GetInvalidPathChars());
-        if (path.ContainsAny(invalidPathChars))
-        {
-            return false;
+            var option = new CommandLineOption(optionDescriptor, string.Empty);
+            if (!options.TryAdd(optionDescriptor.OptionType, option))
+            {
+                string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once.";
+                return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+            }
         }
 
-        // Optional: Check for invalid file name characters in segments
-        if (!CommandHandlerHelpers.IsFilePath(path))
+        string providedTerminalProfile = options
+            .GetValueOrDefault(CommandLineOptionId.LaunchWindowsTerminal)
+            .Value;
+        var immutableOptionsTable = options.ToImmutableDictionary(CommandLineOptionIdComparer.Instance);
+        Configuration configuration = await ConfigurationReader.ReadConfigurationAsync(configFilePath);
+        AliasResolverResult providedProfileAliasLookupResult = await AliasResolver.CreateAliasAsync(providedTerminalProfile, configuration);
+        if (providedProfileAliasLookupResult.HasError)
         {
-            return true;
+            return new CommandParserResult(CommandLineCommand.Default, [providedProfileAliasLookupResult.ErrorMessage]);
         }
 
-        string fileName = CommandHandlerHelpers.GetFileNameIfFile(path);
-        SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
-        return !fileName.ContainsAny(invalidNameChars);
+        AliasResolverResult defaultProfileLookupResult = await AliasResolver.CreateAliasAsync(configuration.DefaultProfileValue, configuration);
+        if (defaultProfileLookupResult.HasError)
+        {
+            return new CommandParserResult(CommandLineCommand.Default, [defaultProfileLookupResult.ErrorMessage]);
+        }
+
+        CommandContext context = CreateCommandContext(configuration, immutableOptionsTable);
+        var arguments = new CommandArguments(providedProfileAliasLookupResult.TerminalProfile, defaultProfileLookupResult.TerminalProfile, immutableOptionsTable);
+        
+        return new CommandParserResult(new CommandLineCommand(arguments, context), []);
     }
 
     private static CommandContext CreateCommandContext(Configuration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)
@@ -155,23 +140,4 @@ internal static class CommandLineArgumentParser
 
         return new CommandContext(launchMode, executionMode);
     }
-}
-
-internal sealed class CommandLineOptionIdComparer : 
-    IEqualityComparer<CommandLineOption>,
-    IEqualityComparer<CommandLineOptionId>
-{
-    public static CommandLineOptionIdComparer Instance { get; } = new CommandLineOptionIdComparer();
-
-    private CommandLineOptionIdComparer() { }
-
-    public bool Equals(CommandLineOption x, CommandLineOption y) => Equals(x.Descriptor.OptionType, y.Descriptor.OptionType);
-    public bool Equals(CommandLineOptionId x, CommandLineOption y) => Equals(x, y.Descriptor.OptionType);
-    public bool Equals(CommandLineOption x, CommandLineOptionId y) => Equals(x.Descriptor.OptionType, y);
-
-    public bool Equals(CommandLineOptionId x, CommandLineOptionId y) => x == y;
-
-    public int GetHashCode(CommandLineOption obj) => GetHashCode(obj.Descriptor.OptionType);
-
-    public int GetHashCode([DisallowNull] CommandLineOptionId obj) => obj.GetHashCode();
 }
