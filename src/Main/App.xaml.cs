@@ -65,7 +65,7 @@ public partial class App : Application
         var listAliasesOption = new CommandLineOptionDescriptor(
             "--list", 
             "-l", CommandLineOptionId.ListAliases, 
-            CommandLineOptionKind.Flag, 
+            CommandLineOptionKind.Mode, 
             "List-Profile-Alises", 
             ["List registered Windows Terminal", 
                 "profiles and aliases"], 

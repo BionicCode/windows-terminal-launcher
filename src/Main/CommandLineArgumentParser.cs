@@ -47,9 +47,17 @@ internal static class CommandLineArgumentParser
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
 
-                    string value = optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue
-                        ? rawArguments[++index]
-                        : string.Empty;
+                    string value = string.Empty;
+                    if (optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue)
+                    {  
+                        if (++index >= rawArguments.Length)
+                        {
+                            string errorMessage = $"Incomplete command option '{arg}' at argument index '{index}'. The provided option requires a value but nothing was fgound. {CommandHelpers.ErrorMessageHint}";
+                            return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+                        }
+
+                        value = rawArguments[++index];
+                    }
 
                     if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath or CommandLineOptionId.WorkingDirectory)
                     {
