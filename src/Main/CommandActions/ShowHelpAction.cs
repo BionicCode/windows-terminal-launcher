@@ -127,7 +127,7 @@ internal sealed class ShowHelpAction : CommandAction
             .Append(' ', LineIndentation)
             .AppendLine("Furthermore, if the options of type 'Mode' e.g., '--config' or '--variable'")
             .Append(' ', LineIndentation)
-            .AppendLine("are specified, the alias argument will be ignored.")
+            .AppendLine("are specified, the alias argument will cause an error.")
             .AppendLine();
 
         int maxAliasLength = configuration.TerminalProfiles.Max(profile => profile.Alias.Length);
@@ -141,7 +141,7 @@ internal sealed class ShowHelpAction : CommandAction
 
             if (terminalProfile.IsDefault)
             {
-                _ = messageBuilder.Append(" (default)");
+                _ = messageBuilder.Append(" <-- specified default");
             }
 
             _ = messageBuilder.AppendLine();
