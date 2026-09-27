@@ -45,7 +45,7 @@ internal sealed class LaunchWindowsTerminalAction : CommandAction
         if (isProfileSpecified)
         {
             startInfo.ArgumentList.Add("-p");
-            startInfo.ArgumentList.Add(command.Arguments.TerminalProfile.Name);
+            startInfo.ArgumentList.Add(selectedTerminalProfile);
         }
 
         // Control working directory.

@@ -147,7 +147,7 @@ internal static class CommandValidator
             errorMessages.Add(errorMessage);
         }
 
-        if (errorMessage.Any())
+        if (errorMessages.Any())
         {
             errorMessages.Add(CommandHelpers.ErrorMessageHint);
             return new ValidationResult(errorMessages.ToImmutableArray());

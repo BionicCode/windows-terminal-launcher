@@ -48,6 +48,17 @@
     "Set-PATH-Environment-Variable": {
       "commandName": "Project",
       "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -u --fp"
+    },
+    "Lit-No-Arguments": {
+      "commandName": "Project"
+    },
+    "Lit-Custom-WorkingDirectory": {
+      "commandName": "Project",
+      "commandLineArgs": "-w %REPOS%"
+    },
+    "Lit-Admin-Custom-WorkingDirectory": {
+      "commandName": "Project",
+      "commandLineArgs": "-w %REPOS% -a"
     }
   }
 }

@@ -44,12 +44,13 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
         }
         else
         {
-            _ = TryGetpath(CommandLineOptionId.SourcePath, command, out string sourcePath, currentConfigFilePath);
+            _ = TryGetPath(CommandLineOptionId.SourcePath, command, out string sourcePath, currentConfigFilePath);
 
             string fallbackFileName = CommandHelpers.GetFileNameIfFile(sourcePath);
-            _ = TryGetpath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory, fallbackFileName);
+            _ = TryGetPath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory, fallbackFileName);
             if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
             {
+                // TODO::Report error
                 return CommandExitMode.ShutdownRequired;
             }
 
@@ -73,14 +74,16 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
                 }
             }
 
-            SetConfigLocationAsync(sourcePath, destinationPath);
-            applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, destinationPath);
+            if (TrySetConfigLocationAsync(sourcePath, destinationPath))
+            {
+                applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, destinationPath);
+            }
 
             return CommandExitMode.ShutdownRequired;
         }
     }
 
-    private static bool TryGetpath(
+    private static bool TryGetPath(
         CommandLineOptionId pathId,
         CommandLineCommand command,
         [NotNullWhen(true)] out string path,
@@ -112,7 +115,7 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
         return !string.IsNullOrWhiteSpace(path);
     }
 
-    private static void SetConfigLocationAsync(string sourcePath, string destinationPath)
+    private static bool TrySetConfigLocationAsync(string sourcePath, string destinationPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
@@ -140,7 +143,9 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
             };
 
             dialog.Show();
-            return;
+            return false;
         }
+
+        return true;
     }
 }

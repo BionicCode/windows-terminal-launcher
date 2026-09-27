@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using Microsoft.ML.OnnxRuntime;
 using YamlDotNet.Core.Tokens;
 
 internal static class CommandLineArgumentParser
@@ -28,82 +29,84 @@ internal static class CommandLineArgumentParser
         ArgumentNullException.ThrowIfNull(validOptions);
 
         var options = new Dictionary<CommandLineOptionId, CommandLineOption>(CommandLineOptionIdComparer.Instance);
-        if (rawArguments.Length > 0)
+        for (int index = 0; index < rawArguments.Length; index++)
         {
-            for (int index = 0; index < rawArguments.Length; index++)
+            string arg = rawArguments[index];
+            if (string.IsNullOrWhiteSpace(arg))
             {
-                string arg = rawArguments[index];
-                if (string.IsNullOrWhiteSpace(arg))
+                continue;
+            }
+
+            // Must be an option if it starts with a dash
+            if (arg.StartsWith('-'))
+            {
+                if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
                 {
-                    continue;
+                    string errorMessage = $"Invalid command option '{arg}' at argument index '{index}'. {CommandHelpers.ErrorMessageHint}";
+                    return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                 }
 
-                // Must be an option if it starts with a dash
-                if (arg.StartsWith('-'))
+                string value = string.Empty;
+                if (optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue)
                 {
-                    if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
+                    if (++index >= rawArguments.Length)
                     {
-                        string errorMessage = $"Invalid command option '{arg}' at argument index '{index}'. {CommandHelpers.ErrorMessageHint}";
+                        string errorMessage = $"Incomplete command option '{arg}' at argument index '{index}'. The provided option requires a value but nothing was fgound. {CommandHelpers.ErrorMessageHint}";
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
 
-                    string value = string.Empty;
-                    if (optionDescriptor.Kind is CommandLineOptionKind.Value or CommandLineOptionKind.ModeAndValue)
-                    {  
-                        if (++index >= rawArguments.Length)
+                    value = rawArguments[index];
+                }
+
+                if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath or CommandLineOptionId.WorkingDirectory)
+                {
+                    try
+                    {
+                        if (!CommandHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
                         {
-                            string errorMessage = $"Incomplete command option '{arg}' at argument index '{index}'. The provided option requires a value but nothing was fgound. {CommandHelpers.ErrorMessageHint}";
+                            string errorMessage = $"Invalid source path argument at argument index '{index}'. The path is malformed. {CommandHelpers.ErrorMessageHint}";
                             return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                         }
 
-                        value = rawArguments[++index];
+                        value = normalizedSourcePath;
                     }
-
-                    if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath or CommandLineOptionId.WorkingDirectory)
+                    catch (FileNotFoundException)
                     {
-                        try
-                        {
-                            if (!CommandHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
-                            {
-                                string errorMessage = $"Invalid source path argument at argument index '{index}'. The path is malformed. {CommandHelpers.ErrorMessageHint}";
-                                return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
-                            }
-
-                            value = normalizedSourcePath;
-                        }
-                        catch (FileNotFoundException)
-                        {
-                            string errorMessage = $"Invalid source path argument at argument index '{index}'. The path was not found. {CommandHelpers.ErrorMessageHint}";
-                            return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
-                        }
-                    }
-
-                    var option = new CommandLineOption(optionDescriptor, value);
-                    if (!options.TryAdd(optionDescriptor.OptionType, option))
-                    {
-                        string errorMessage = $"Duplicate command option. The option '{optionDescriptor.OptionType}' can be specified only once. {CommandHelpers.ErrorMessageHint}";
+                        string errorMessage = $"Invalid source path argument at argument index '{index}'. The path was not found. {CommandHelpers.ErrorMessageHint}";
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
                 }
-                else
-                {
-                    // Arguments without leading '-' or '--' are treated as Windows Terminal profile name alias
-                    if (!validOptions.TryGetValue(CommandLineOption.AliasOptionKey, out CommandLineOptionDescriptor optionDescriptor))
-                    {
-                        string errorMessage = $"Command option '{CommandLineOption.AliasOptionKey}' has not been registered properly.";
-                        throw new InvalidOperationException(errorMessage);
-                    }
 
-                    var option = new CommandLineOption(optionDescriptor, arg);
-                    if (!options.TryAdd(optionDescriptor.OptionType, option))
-                    {
-                        string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once. {CommandHelpers.ErrorMessageHint}";
-                        return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
-                    }
+                var option = new CommandLineOption(optionDescriptor, value);
+                if (!options.TryAdd(optionDescriptor.OptionType, option))
+                {
+                    string errorMessage = $"Duplicate command option. The option '{optionDescriptor.OptionType}' can be specified only once. {CommandHelpers.ErrorMessageHint}";
+                    return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+                }
+            }
+            else
+            {
+                // Arguments without leading '-' or '--' are treated as Windows Terminal profile name alias
+                if (!validOptions.TryGetValue(CommandLineOption.AliasOptionKey, out CommandLineOptionDescriptor optionDescriptor))
+                {
+                    string errorMessage = $"Command option '{CommandLineOption.AliasOptionKey}' has not been registered properly.";
+                    throw new InvalidOperationException(errorMessage);
+                }
+
+                var option = new CommandLineOption(optionDescriptor, arg);
+                if (!options.TryAdd(optionDescriptor.OptionType, option))
+                {
+                    string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once. {CommandHelpers.ErrorMessageHint}";
+                    return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                 }
             }
         }
-        else
+
+        // Handle special cases to ensure the default commands
+        // 'lit', 'lit --admin', 'lit -w "C:\" and 'lit --adim -w "C:\"' can run
+        if (options.Count == 0
+            || options.Count == 1 && (options.ContainsKey(CommandLineOptionId.RunAsAdmin) || options.ContainsKey(CommandLineOptionId.WorkingDirectory))
+            || options.Count == 2  && options.ContainsKey(CommandLineOptionId.RunAsAdmin) && options.ContainsKey(CommandLineOptionId.RunAsAdmin))
         {
             // Ensure a command without any arguments is executed as default 'Launch-Windows-Terminal' command
             // that uses the current workiing directory and the terminal's default profile
