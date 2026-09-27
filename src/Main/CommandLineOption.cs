@@ -6,9 +6,7 @@ internal readonly record struct CommandLineOption(
     CommandLineOptionDescriptor Descriptor,
     string Value)
 {
-    public const string AliasOptionKey = "alias";
-    public static implicit operator CommandLineOptionId(CommandLineOption option) => option.Descriptor.OptionType;
-    public static implicit operator CommandLineOption(CommandLineOptionId optionType) => new(new (string.Empty, string.Empty, optionType, CommandLineOptionKind.Undefined, [], string.Empty, false), string.Empty);
+    public const string AliasOptionKey = "<terminal-profile-alias>";
 };
 
 internal readonly record struct CommandLineOptionDescriptor(

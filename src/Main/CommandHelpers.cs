@@ -12,9 +12,8 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-internal static class CommandHandlerHelpers
+internal static class CommandHelpers
 {
-
     public static string GetFileNameIfFile(string path) => IsFilePath(path)
         ? Path.GetFileName(path)
         : string.Empty;
@@ -79,12 +78,12 @@ internal static class CommandHandlerHelpers
         }
 
         // Optional: Check for invalid file name characters in segments
-        if (!CommandHandlerHelpers.IsFilePath(path))
+        if (!CommandHelpers.IsFilePath(path))
         {
             return true;
         }
 
-        string fileName = CommandHandlerHelpers.GetFileNameIfFile(path);
+        string fileName = CommandHelpers.GetFileNameIfFile(path);
         SearchValues<char> invalidNameChars = SearchValues.Create(Path.GetInvalidFileNameChars());
         return !fileName.ContainsAny(invalidNameChars);
     }
@@ -182,4 +181,9 @@ internal static class CommandHandlerHelpers
 
         dialog.Show();
     }
+
+    public static string? _rawCommandInput;
+    public static string RawCommandInput => _rawCommandInput ??= $"lit {string.Join(' ', Environment.GetCommandLineArgs()[1..])}";
+    public static string ErrorMessageHint => $"Use 'lit --help' to get the comamnd syntax and list of options.{Environment.NewLine}{Environment.NewLine}Raw input: {RawCommandInput}{Environment.NewLine}Working directory: {Environment.CurrentDirectory}";
+    public const string VariableName_PATH = "PATH";
 }

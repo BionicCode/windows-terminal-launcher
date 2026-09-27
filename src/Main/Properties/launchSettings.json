@@ -35,11 +35,19 @@
     },
     "Set-Environment-Variable": {
       "commandName": "Project",
-      "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -m -j"
+      "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -m -j --fp"
     },
     "Get-Environment-Variable": {
       "commandName": "Project",
       "commandLineArgs": "--var \"PATH\" -m -p"
+    },
+    "Too-Many-Arguments": {
+      "commandName": "Project",
+      "commandLineArgs": "ps -w \"C:\\Temp\" --print"
+    },
+    "Set-PATH-Environment-Variable": {
+      "commandName": "Project",
+      "commandLineArgs": "--var \"PATH\" --val \"I:\\GitHubRepositories\\WindowsTerminalLauncher\\artifacts\" -u --fp"
     }
   }
 }

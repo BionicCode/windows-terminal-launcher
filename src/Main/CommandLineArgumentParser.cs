@@ -43,7 +43,7 @@ internal static class CommandLineArgumentParser
                 {
                     if (!validOptions.TryGetValue(arg, out CommandLineOptionDescriptor optionDescriptor))
                     {
-                        string errorMessage = $"Invalid command option '{arg}' at argument index '{index}'.{Environment.NewLine}Use '[-h | --help]' to see the list of valid options.";
+                        string errorMessage = $"Invalid command option '{arg}' at argument index '{index}'. {CommandHelpers.ErrorMessageHint}";
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
 
@@ -53,19 +53,27 @@ internal static class CommandLineArgumentParser
 
                     if (optionDescriptor.OptionType is CommandLineOptionId.SourcePath or CommandLineOptionId.DestinationPath or CommandLineOptionId.WorkingDirectory)
                     {
-                        if (!CommandHandlerHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                        try
                         {
-                            string errorMessage = $"Invalid source path argument at argument index '{index}'. The path is malformed.";
+                            if (!CommandHelpers.TryNormalizeWindowsPath(value, out string? normalizedSourcePath))
+                            {
+                                string errorMessage = $"Invalid source path argument at argument index '{index}'. The path is malformed. {CommandHelpers.ErrorMessageHint}";
+                                return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
+                            }
+
+                            value = normalizedSourcePath;
+                        }
+                        catch (FileNotFoundException)
+                        {
+                            string errorMessage = $"Invalid source path argument at argument index '{index}'. The path was not found. {CommandHelpers.ErrorMessageHint}";
                             return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                         }
-
-                        value = normalizedSourcePath;
                     }
 
                     var option = new CommandLineOption(optionDescriptor, value);
                     if (!options.TryAdd(optionDescriptor.OptionType, option))
                     {
-                        string errorMessage = $"Duplicate command option. The option '{optionDescriptor.OptionType}' can be specified only once.";
+                        string errorMessage = $"Duplicate command option. The option '{optionDescriptor.OptionType}' can be specified only once. {CommandHelpers.ErrorMessageHint}";
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
                 }
@@ -81,7 +89,7 @@ internal static class CommandLineArgumentParser
                     var option = new CommandLineOption(optionDescriptor, arg);
                     if (!options.TryAdd(optionDescriptor.OptionType, option))
                     {
-                        string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once.";
+                        string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once. {CommandHelpers.ErrorMessageHint}";
                         return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
                     }
                 }
@@ -101,7 +109,7 @@ internal static class CommandLineArgumentParser
             var option = new CommandLineOption(optionDescriptor, string.Empty);
             if (!options.TryAdd(optionDescriptor.OptionType, option))
             {
-                string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once.";
+                string errorMessage = $"Duplicate command option. A Windows Terminal profile name alias can be specified only once. {CommandHelpers.ErrorMessageHint}";
                 return new CommandParserResult(CommandLineCommand.Default, [errorMessage]);
             }
         }
@@ -125,7 +133,7 @@ internal static class CommandLineArgumentParser
         CommandContext context = CreateCommandContext(userConfiguration, immutableOptionsTable);
         var arguments = new CommandArguments(providedProfileAliasLookupResult.TerminalProfile, defaultProfileLookupResult.TerminalProfile, immutableOptionsTable);
         
-        return new CommandParserResult(new CommandLineCommand(arguments, context), []);
+        return new CommandParserResult(new CommandLineCommand(arguments, context, CommandHelpers.RawCommandInput), []);
     }
 
     private static CommandContext CreateCommandContext(UserConfiguration configuration, ImmutableDictionary<CommandLineOptionId, CommandLineOption> options)

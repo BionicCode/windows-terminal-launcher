@@ -25,7 +25,7 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
         if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
         {
             string message = string.IsNullOrWhiteSpace(currentConfigFilePath)
-                ? "No location set. Please set a location first. See '--help' or '-h'."
+                ? "No location set. Please set a location first. {CommandHelpers.ErrorMessageHint}"
                 : currentConfigFilePath;
 
             var dialog = new InfoDialog
@@ -46,7 +46,7 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
         {
             _ = TryGetpath(CommandLineOptionId.SourcePath, command, out string sourcePath, currentConfigFilePath);
 
-            string fallbackFileName = CommandHandlerHelpers.GetFileNameIfFile(sourcePath);
+            string fallbackFileName = CommandHelpers.GetFileNameIfFile(sourcePath);
             _ = TryGetpath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory, fallbackFileName);
             if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -89,7 +89,7 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
     {
         if (pathId is not CommandLineOptionId.SourcePath and not CommandLineOptionId.DestinationPath)
         {
-            throw new ArgumentException($"Provided option ID '{Enum.GetName(pathId)}' is n ot a path ID.");
+            throw new ArgumentException($"Provided option ID '{Enum.GetName(pathId)}' is not a path ID.");
         }
 
         path = string.Empty;
@@ -104,7 +104,7 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
 
         if (!string.IsNullOrWhiteSpace(path)
             && !string.IsNullOrWhiteSpace(fileName)
-            && !CommandHandlerHelpers.IsFilePath(path))
+            && !CommandHelpers.IsFilePath(path))
         {
             path = Path.Combine(path, fileName);
         }

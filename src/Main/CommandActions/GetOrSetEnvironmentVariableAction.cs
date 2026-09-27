@@ -31,7 +31,7 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
             && (!command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableScopeUser)
                 || !Enum.TryParse(CommandLineOptionId.EnvironmentVariableScopeUser.ToDisplayString(), ignoreCase: true, out environmentVariableTarget)))
         {
-            throw new InvalidCommandArgumentException("The command is malformed");
+            throw new InvalidCommandArgumentException("The command is malformed. Check command validator whether the current case is handled correctly.");
         }
 
         if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
@@ -42,9 +42,9 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         {
 
             if (environmentVariableTarget is EnvironmentVariableTarget.Machine
-                && !CommandHandlerHelpers.IsCurrentProcessElevated())
+                && !CommandHelpers.IsCurrentProcessElevated())
             {
-                _ = CommandHandlerHelpers.RelaunchElevated();
+                _ = CommandHelpers.RelaunchElevated();
                 return CommandExitMode.ShutdownRequired;
             }
 
@@ -91,7 +91,8 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 ? Path.PathSeparator.ToString()
                 : delimiterOption.Value;
         if (!string.IsNullOrWhiteSpace(currentValue) 
-            && optionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin))
+            && optionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin)
+            || variableName.Equals(CommandHelpers.VariableName_PATH, StringComparison.OrdinalIgnoreCase))
         {
             newValue = string.Join(delimiter, currentValue, newValue);
         }

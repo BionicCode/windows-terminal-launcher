@@ -13,11 +13,11 @@ internal sealed class ShowHelpAction : CommandAction
 
     protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userConfiguration, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
     {
-        ShowHelp(validCommandOptionsTable, userConfiguration);
+        ShowHelp(command.CommandIdProviderOption.Descriptor.OptionType, validCommandOptionsTable, userConfiguration);
         return CommandExitMode.Auto;
     }
 
-    private static void ShowHelp(IReadOnlyDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validOptionsTable, UserConfiguration userConfiguration)
+    private static void ShowHelp(CommandLineOptionId commandId, IReadOnlyDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validOptionsTable, UserConfiguration userConfiguration)
     {
         ArgumentNullException.ThrowIfNull(validOptionsTable);
 
@@ -33,9 +33,13 @@ internal sealed class ShowHelpAction : CommandAction
 
         CreateUsageMessage(helpMessageBuilder);
         helpMessageBuilder = CreateAliasesMessage(userConfiguration, helpMessageBuilder);
-        helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
+        
+    if (commandId is CommandLineOptionId.Help)
+        {
+            helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
+        }
 
-        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
+        CommandHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
     }
 
     public static async Task ShowAliasesAsync(string userConfigurationFilePath)
@@ -44,7 +48,7 @@ internal sealed class ShowHelpAction : CommandAction
         var helpMessageBuilder = new StringBuilder();
         helpMessageBuilder = CreateAliasesMessage(configuration, helpMessageBuilder);
 
-        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
+        CommandHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
     }
 
     private static StringBuilder CreateOptionsMessage(IReadOnlyDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validOptionsTable, StringBuilder messageBuilder)
@@ -111,7 +115,7 @@ internal sealed class ShowHelpAction : CommandAction
 
     private static StringBuilder CreateAliasesMessage(UserConfiguration configuration, StringBuilder messageBuilder)
     {
-        _ = messageBuilder.AppendLine("Aliases:")
+        _ = messageBuilder.AppendLine("Windows Terminal Profile Aliases:")
             .Append(' ', LineIndentation)
             .AppendLine("Note: If no alias is provided, the default alias as specified in the")
             .Append(' ', LineIndentation)
@@ -156,7 +160,7 @@ internal sealed class ShowHelpAction : CommandAction
         .AppendLine("Launch Windows Terminal at the current working directory (explorer older):")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
-        .AppendLine("lit [<alias>]")
+        .AppendLine("lit [<terminal-profile-alias>]")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("[(-a | --admin)]")
@@ -226,6 +230,15 @@ internal sealed class ShowHelpAction : CommandAction
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("         ';' will be used.")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         If the target is the '%PATH%' environment variable then")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         the following options are ignored (and therefore redundant):")
+        .Append(' ', LineIndentation)
+        .Append(' ', LineIndentation)
+        .AppendLine("         '--del | -d', '--join | -j', '--replace | -r'.")
         .AppendLine()
         .Append(' ', LineIndentation)
         .AppendLine("Show the value of a specified environment variable:")
@@ -239,38 +252,4 @@ internal sealed class ShowHelpAction : CommandAction
         .Append(' ', LineIndentation)
         .AppendLine("(--p | --print)")
         .AppendLine();
-}
-
-internal sealed class ShowVersionAction : CommandAction
-{
-    public ShowVersionAction() : base(CommandLineOptionId.Help)
-    {
-    }
-
-    protected override CommandExitMode ExecuteInternal(CommandLineCommand command, IApplicationSettings applicationSettings, UserConfiguration userConfiguration, ImmutableDictionary<CommandLineOptionId, CommandLineOptionDescriptor> validCommandOptionsTable)
-    {
-        ShowVersion(validCommandOptionsTable, userConfiguration);
-        return CommandExitMode.Auto;
-    }
-
-    private static void ShowHelp(IReadOnlyDictionary<string, CommandLineOptionDescriptor> validOptionsTable, UserConfiguration userConfiguration)
-    {
-        ArgumentNullException.ThrowIfNull(validOptionsTable);
-
-        StringBuilder helpMessageBuilder = new StringBuilder()
-            .AppendLine("This application is a command line utility for launching a Windows Terminal tab or")
-            .AppendLine("instance from the Windows Explorer's address bar with a specified Windows Terminal")
-            .AppendLine("profile. The terminal's working directory is set to the path of the currently")
-            .AppendLine("navigated Windows Explorer folder.")
-            .AppendLine()
-            .AppendLine("For more information, please visit the GitHub repository:")
-            .AppendLine("https://github.com/BionicCode/windows-terminal-launcher")
-            .AppendLine();
-
-        CreateUsageMessage(helpMessageBuilder);
-        helpMessageBuilder = CreateAliasesMessage(userConfiguration, helpMessageBuilder);
-        helpMessageBuilder = CreateOptionsMessage(validOptionsTable, helpMessageBuilder);
-
-        CommandHandlerHelpers.ShowInfoDialog(helpMessageBuilder.ToString());
-    }
 }

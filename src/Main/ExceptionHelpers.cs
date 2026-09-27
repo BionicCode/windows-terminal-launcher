@@ -13,4 +13,15 @@ internal static class ExceptionHelpers
             throw new ArgumentException($"Wrong command type. Expected: '{Enum.GetName(expectedCommandType)}'. Found: '{Enum.GetName(currentCommandType)}.");
         }
     }
+
+    internal static void ThrowArgumentExceptionIfWrongCommandType(CommandLineOptionId currentCommandType, HashSet<CommandLineOptionId> expectedCommandTypes)
+    {
+        ArgumentNullException.ThrowIfNull(expectedCommandTypes);
+
+        if (!expectedCommandTypes.Contains(currentCommandType))
+        {
+            string allowedValuesString = string.Join(", ", expectedCommandTypes.Select(expectedCommandType => Enum.GetName(expectedCommandType)));
+            throw new ArgumentException($"Wrong command type. Expected: '{allowedValuesString}'. Found: '{Enum.GetName(currentCommandType)}.");
+        }
+    }
 }

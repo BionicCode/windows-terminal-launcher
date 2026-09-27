@@ -2,7 +2,7 @@
 
 using BionicCode.Utilities.Net;
 
-internal readonly record struct CommandLineCommand(CommandArguments Arguments, CommandContext Context)
+internal readonly record struct CommandLineCommand(CommandArguments Arguments, CommandContext Context, string RawInput)
 {
     public bool HasMode => Arguments.HasMode;
     public bool HasAlias => Arguments.HasAlias;
@@ -11,7 +11,7 @@ internal readonly record struct CommandLineCommand(CommandArguments Arguments, C
     private readonly WriteOnce<CommandLineOption> _commandIdProviderOption = new ();
     public CommandLineOption CommandIdProviderOption => _commandIdProviderOption.IsSet
         ? _commandIdProviderOption
-        : _commandIdProviderOption.SetValue(Arguments.OptionsTable.Values.First(option => option.Descriptor.Kind is CommandLineOptionKind.Mode or CommandLineOptionKind.ModeAndValue ;
+        : _commandIdProviderOption.SetValue(Arguments.OptionsTable.Values.First(option => option.Descriptor.Kind is CommandLineOptionKind.Mode or CommandLineOptionKind.ModeAndValue));
 
     private readonly WriteOnce<string> _name = new ();
     public string Name => _name.IsSet
@@ -20,5 +20,7 @@ internal readonly record struct CommandLineCommand(CommandArguments Arguments, C
             .Select(option => option.Descriptor.CommandName)
             .FirstOrDefault(commandName => !string.IsNullOrWhiteSpace(commandName)) ?? string.Empty);
 
-    public static readonly CommandLineCommand Default = new CommandLineCommand(CommandArguments.Default, CommandContext.Default);
+    public static readonly CommandLineCommand Default = new CommandLineCommand(CommandArguments.Default, CommandContext.Default, string.Empty);
+
+    public override string ToString() => Name;
 };
