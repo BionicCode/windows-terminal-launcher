@@ -167,7 +167,7 @@ internal static class CommandHelpers
         dialog.Show();
     }
 
-    public static void ShowInteractionDialog(string message, ImageSource? dialogIcon, string title = "lit.exe Info", string header = "lit.exe Info")
+    public static bool? ShowInteractionDialog(string message, ImageSource? dialogIcon, string title = "lit.exe Info", string header = "lit.exe Info")
     {
         ArgumentNullException.ThrowIfNullOrWhiteSpace(message);
 
@@ -179,7 +179,7 @@ internal static class CommandHelpers
             Icon = dialogIcon ?? Imaging.CreateBitmapSourceFromHIcon(SystemIcons.Information.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions())
         };
 
-        dialog.Show();
+        return dialog.ShowDialog();
     }
 
     public static string? _rawCommandInput;

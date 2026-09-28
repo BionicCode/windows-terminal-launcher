@@ -21,25 +21,18 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
         ArgumentNullException.ThrowIfNull(applicationSettings);
 
         _ = applicationSettings.TryGet(AppSettingsKeys.UserConfigFileLocationKey, out string currentConfigFilePath);
-
+        
         if (command.Arguments.OptionsTable.ContainsKey(CommandLineOptionId.Print))
         {
             string message = string.IsNullOrWhiteSpace(currentConfigFilePath)
                 ? "No location set. Please set a location first. {CommandHelpers.ErrorMessageHint}"
                 : currentConfigFilePath;
 
-            var dialog = new InfoDialog
-            {
-                Title = "lit.exe user configuration file location",
-                Header = "The user configuration YAML file is located at:",
-                Body = message,
-                Icon = Imaging.CreateBitmapSourceFromHIcon(
-                    SystemIcons.Information.Handle,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions())
-            };
+            CommandHelpers.ShowInfoDialog(
+                message,
+          "lit.exe user configuration file location",
+                "The user configuration YAML file is located at:");
 
-            dialog.Show();
             return CommandExitMode.Auto;
         }
         else
@@ -48,26 +41,34 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
 
             string fallbackFileName = CommandHelpers.GetFileNameIfFile(sourcePath);
             _ = TryGetPath(CommandLineOptionId.DestinationPath, command, out string destinationPath, Environment.CurrentDirectory, fallbackFileName);
+            
+            // Special case where the source file is the new user config file
+            // and remains located at its original location (no copy or move operation)
             if (sourcePath.Equals(destinationPath, StringComparison.OrdinalIgnoreCase))
             {
-                // TODO::Report error
+                // New location and file is the current location and file
+                if (sourcePath.Equals(currentConfigFilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    CommandHelpers.ShowInfoDialog(
+                        $"Path arguments specify the current user config file location. Therefore no action was performed.{Environment.NewLine}Current location: '{currentConfigFilePath}'",
+                        "lit.exe Notification",
+                        "Set New User Config Path");
+                    
+                    return CommandExitMode.Auto;
+                }
+
+                applicationSettings.AddOrUpdate(AppSettingsKeys.UserConfigFileLocationKey, sourcePath);
                 return CommandExitMode.ShutdownRequired;
             }
 
             if (File.Exists(destinationPath))
             {
-                var dialog = new InteractionDialog
-                {
-                    Title = "File exists",
-                    Header = "File Exists:",
-                    Body = $"The file '{destinationPath}'{Environment.NewLine}already exists. Overwrite the existing file?",
-                    Icon = Imaging.CreateBitmapSourceFromHIcon(
-                        SystemIcons.Warning.Handle,
-                        Int32Rect.Empty,
-                        BitmapSizeOptions.FromEmptyOptions())
-                };
+                bool? dialogResult = CommandHelpers.ShowInteractionDialog(
+                    $"The file '{destinationPath}'{Environment.NewLine}already exists. Overwrite the existing file?",
+                    Imaging.CreateBitmapSourceFromHIcon(SystemIcons.Warning.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions()),
+                    "File exists",
+                    "File exists");
 
-                bool? dialogResult = dialog.ShowDialog();
                 if (dialogResult == false)
                 {
                     return CommandExitMode.ShutdownRequired;
@@ -131,18 +132,10 @@ internal sealed class GetOrSetUserConfigLocationAction : CommandAction
             or IOException
             or DirectoryNotFoundException)
         {
-            var dialog = new InfoDialog
-            {
-                Title = "lit.exe Error",
-                Header = "The copy operation failed:",
-                Body = ex.Message,
-                Icon = Imaging.CreateBitmapSourceFromHIcon(
-                    SystemIcons.Information.Handle,
-                    Int32Rect.Empty,
-                    BitmapSizeOptions.FromEmptyOptions())
-            };
+            CommandHelpers.ShowErrorDialog(
+                ex.Message, 
+                header: $"Copying the user configuration file failed:{Environment.NewLine}Source: '{sourcePath}'{Environment.NewLine}Destination: '{destinationPath}'");
 
-            dialog.Show();
             return false;
         }
 

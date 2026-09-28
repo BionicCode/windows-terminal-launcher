@@ -15,7 +15,6 @@ using Windows.Win32.UI.WindowsAndMessaging;
 
 internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
 {
-    private const string VariableName_PATH = "PATH";
     private const string UserEnvironmentRegistryKey = "Environment";
     private const string SystemEnvironmentRegistryKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
 
@@ -72,13 +71,15 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
             ?? throw new InvalidOperationException("Environment registry key is missing.");
 
         string variableName = variableNameOption.Value;
+        bool isVariablePathVariable = variableName.Equals(CommandHelpers.VariableName_PATH, StringComparison.OrdinalIgnoreCase);
 
         bool wasFolded = optionsTable.ContainsKey(CommandLineOptionId.FoldPath)
             && TryFoldNewValue(
                 ref newValue,
                 variableName,
                 environmentVariableTarget,
-                registryKey);
+                registryKey,
+                isVariablePathVariable);
 
         object? rawValue = registryKey.GetValue(
             variableName,
@@ -86,13 +87,13 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
             RegistryValueOptions.DoNotExpandEnvironmentNames);
 
         string currentValue = rawValue as string ?? string.Empty;
-        string delimiter = variableName.Equals(VariableName_PATH, StringComparison.OrdinalIgnoreCase) 
+        string delimiter = isVariablePathVariable 
             || !optionsTable.TryGetValue(CommandLineOptionId.EnvironmentVariableWriteModeJoinDelimiter, out CommandLineOption delimiterOption)
                 ? Path.PathSeparator.ToString()
                 : delimiterOption.Value;
         if (!string.IsNullOrWhiteSpace(currentValue) 
             && optionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin)
-            || variableName.Equals(CommandHelpers.VariableName_PATH, StringComparison.OrdinalIgnoreCase))
+            || isVariablePathVariable)
         {
             newValue = string.Join(delimiter, currentValue, newValue);
         }
@@ -112,7 +113,12 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         return CommandExitMode.ShutdownRequired;
     }
 
-    private static bool TryFoldNewValue(ref string newValue, string targetVariableName, EnvironmentVariableTarget environmentVariableTarget, RegistryKey registryKey)
+    private static bool TryFoldNewValue(
+        ref string newValue, 
+        string targetVariableName, 
+        EnvironmentVariableTarget environmentVariableTarget, 
+        RegistryKey registryKey,
+        bool isFileSystemPath)
     {
         string trimmedCurrentValue = string.Empty;
         Dictionary<string, string> candidates = new(StringComparer.OrdinalIgnoreCase);
@@ -124,12 +130,12 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 RegistryRights.QueryValues)
                 ?? throw new InvalidOperationException("Environment registry key is missing.");
 
-            AddEntries(newValue, systemEnvironmentRegistryKey, candidates, isOverrideMachineVariable: false);
+            AddEntries(newValue, targetVariableName, systemEnvironmentRegistryKey, candidates, isOverrideMachineVariable: false, isFileSystemPath);
         }
 
         // Important for User-over-Machine precedence:
         // even a nonmatching User definition must shadow the same Machine variable.
-        AddEntries(newValue, registryKey, candidates, isOverrideMachineVariable: environmentVariableTarget is EnvironmentVariableTarget.User);
+        AddEntries(newValue, targetVariableName, registryKey, candidates, isOverrideMachineVariable: environmentVariableTarget is EnvironmentVariableTarget.User, isFileSystemPath);
         KeyValuePair<string, string> selectedCandidate = candidates.OrderByDescending(entry => entry.Value.Length).FirstOrDefault(entry => !string.IsNullOrWhiteSpace(entry.Value));
         if (selectedCandidate is not { Key: null, Value: null })
         {
@@ -144,13 +150,20 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
 
     private static void AddEntries(
         string newValue, 
+        string targetVariablename,
         RegistryKey registryKey, 
         Dictionary<string, string> candidates, 
-        bool isOverrideMachineVariable)
+        bool isOverrideMachineVariable,
+        bool isFileSystemPath)
     {
         string[] variableNames = registryKey.GetValueNames();
         foreach (string variableName in variableNames)
         {
+            if (variableName.Equals(targetVariablename, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             if (isOverrideMachineVariable)
             {
                 _ = candidates.Remove(variableName);
@@ -161,7 +174,7 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 null,
                 RegistryValueOptions.None) as string;
             if (rawValue is not string currentValue
-                || !IsPrefixMatch(newValue, currentValue))
+                || !IsPrefixMatch(newValue, currentValue,  isFileSystemPath))
             {
                 continue;
             }
@@ -176,8 +189,16 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         }
     }
 
-    private static bool IsPrefixMatch(string value, string candidate)
+    private static bool IsPrefixMatch(string value, string candidate, bool isFileSystemPath)
     {
+        // If we are dealing with a file system path we should normalize
+        // the path's directory separators to make matching reliable
+        if (isFileSystemPath)
+        {
+            value = Path.GetFullPath(value);
+            candidate = Path.GetFullPath(candidate);
+        }
+
         if (!value.StartsWith(
             candidate,
             StringComparison.OrdinalIgnoreCase))
@@ -235,7 +256,7 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         {
             message = $"Variable '{variableName}' not found.";
         }
-        else if (variableName.Equals(VariableName_PATH, StringComparison.OrdinalIgnoreCase))
+        else if (variableName.Equals(CommandHelpers.VariableName_PATH, StringComparison.OrdinalIgnoreCase))
         {
             string variableValue = rawValue as string 
                 ?? rawValue.ToString() 
@@ -252,18 +273,11 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
             message = variableValue;
         }
 
-        var dialog = new InfoDialog
-        {
-            Title = "lit.exe Print Environment Variable",
-            Header = "Print Environment Variable",
-            Body = message,
-            Icon = Imaging.CreateBitmapSourceFromHIcon(
-                SystemIcons.Information.Handle,
-                Int32Rect.Empty,
-                BitmapSizeOptions.FromEmptyOptions())
-        };
+        CommandHelpers.ShowInfoDialog(
+            message,
+            "lit.exe Print Environment Variable",
+            "Print Environment Variable");
 
-        dialog.Show();
         return CommandExitMode.Auto;
     }
 }
