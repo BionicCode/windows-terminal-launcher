@@ -217,7 +217,7 @@ internal sealed class ShowHelpAction : CommandAction
         .AppendLine("[(--val | --value) <value>]")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
-        .AppendLine("((-j | --join) | (-r | --replace) [--del | --delimiter]")
+        .AppendLine("(-j | --join) | (-r | --replace) [--del | --delimiter]")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("(-m | --machine) | (-u | --user)")

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.IO;
 using System.Security.AccessControl;
@@ -121,7 +122,7 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         bool isFileSystemPath)
     {
         string trimmedCurrentValue = string.Empty;
-        Dictionary<string, string> candidates = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, FoldCandidate> candidates = new(StringComparer.OrdinalIgnoreCase);
         if (environmentVariableTarget is EnvironmentVariableTarget.User)
         {
             using RegistryKey systemEnvironmentRegistryKey = Registry.LocalMachine.OpenSubKey(
@@ -130,17 +131,19 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 RegistryRights.QueryValues)
                 ?? throw new InvalidOperationException("Environment registry key is missing.");
 
-            AddEntries(newValue, targetVariableName, systemEnvironmentRegistryKey, candidates, isOverrideMachineVariable: false, isFileSystemPath);
+            AddEntries(newValue, targetVariableName, systemEnvironmentRegistryKey, isOverrideMachineVariable: false, isFileSystemPath, candidates);
         }
 
         // Important for User-over-Machine precedence:
         // even a nonmatching User definition must shadow the same Machine variable.
-        AddEntries(newValue, targetVariableName, registryKey, candidates, isOverrideMachineVariable: environmentVariableTarget is EnvironmentVariableTarget.User, isFileSystemPath);
-        KeyValuePair<string, string> selectedCandidate = candidates.OrderByDescending(entry => entry.Value.Length).FirstOrDefault(entry => !string.IsNullOrWhiteSpace(entry.Value));
-        if (selectedCandidate is not { Key: null, Value: null })
+        AddEntries(newValue, targetVariableName, registryKey, isOverrideMachineVariable: environmentVariableTarget is EnvironmentVariableTarget.User, isFileSystemPath, candidates);
+        FoldCandidate? selectedCandidate = candidates.Values
+            .OrderByDescending(entry => entry.NormalizedVariableValue.Length)
+            .FirstOrDefault(entry => !string.IsNullOrWhiteSpace(entry.NormalizedVariableValue));
+        if (selectedCandidate is not null)
         {
-            string remainingNewValue = newValue[selectedCandidate.Value!.Length..];
-            newValue = $"%{selectedCandidate.Key}%{remainingNewValue}";
+            string remainingNewValue = newValue[selectedCandidate.NormalizedVariableValue.Length..];
+            newValue = $"%{selectedCandidate.VariableName}%{remainingNewValue}";
 
             return true;
         }
@@ -152,9 +155,9 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         string newValue, 
         string targetVariablename,
         RegistryKey registryKey, 
-        Dictionary<string, string> candidates, 
         bool isOverrideMachineVariable,
-        bool isFileSystemPath)
+        bool isFileSystemPath, 
+        Dictionary<string, FoldCandidate> candidates)
     {
         string[] variableNames = registryKey.GetValueNames();
         foreach (string variableName in variableNames)
@@ -173,13 +176,21 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 variableName,
                 null,
                 RegistryValueOptions.None) as string;
+            string normalizedNewValue = newValue;
             if (rawValue is not string currentValue
-                || !IsPrefixMatch(newValue, currentValue,  isFileSystemPath))
+                || !IsPrefixMatch(ref normalizedNewValue, ref currentValue, isFileSystemPath))
             {
                 continue;
             }
 
-            candidates.Add(variableName, currentValue);
+            var candidate = new FoldCandidate(
+                variableName, 
+                rawValue, 
+                currentValue,
+                newValue,
+                normalizedNewValue,
+                isFileSystemPath);
+            candidates.Add(variableName, candidate);
 
             // Already found best candidate
             if (currentValue.Length == newValue.Length)
@@ -189,12 +200,16 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
         }
     }
 
-    private static bool IsPrefixMatch(string value, string candidate, bool isFileSystemPath)
+    private static bool IsPrefixMatch(ref string value, ref string candidate, bool isFileSystemPath)
     {
         // If we are dealing with a file system path we should normalize
         // the path's directory separators to make matching reliable
         if (isFileSystemPath)
         {
+            // Normalize path for separators and to compact path
+            // e.g., removing redundant segments like removing "Temp" from "C:\Folder\Temp\..\Subfolder"
+            // to produce "C:\Folder\Subfolder" after normalization
+            
             value = Path.GetFullPath(value);
             candidate = Path.GetFullPath(candidate);
         }
