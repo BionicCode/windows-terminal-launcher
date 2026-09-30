@@ -92,8 +92,8 @@ internal sealed class GetOrSetEnvironmentVariableAction : CommandAction
                 ? Path.PathSeparator.ToString()
                 : delimiterOption.Value;
         if (!string.IsNullOrWhiteSpace(currentValue) 
-            && optionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin)
-            || isVariablePathVariable)
+            && (optionsTable.ContainsKey(CommandLineOptionId.EnvironmentVariableWriteModeJoin)
+                || isVariablePathVariable))
         {
             newValue = string.Join(delimiter, currentValue, newValue);
         }

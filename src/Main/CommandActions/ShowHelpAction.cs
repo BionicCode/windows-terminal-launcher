@@ -130,21 +130,30 @@ internal sealed class ShowHelpAction : CommandAction
             .AppendLine("are specified, the alias argument will cause an error.")
             .AppendLine();
 
-        int maxAliasLength = configuration.TerminalProfiles.Max(profile => profile.Alias.Length);
-        foreach (TerminalProfile terminalProfile in configuration.TerminalProfiles.OrderBy(profile => profile.Alias))
+        if (configuration.HasTerminalProfiles)
         {
-            int padding = maxAliasLength - terminalProfile.Alias.Length + Padding;
-            _ = messageBuilder.Append(' ', LineIndentation)
-                .Append(terminalProfile.Alias)
-                .Append(' ', padding)
-                .Append(terminalProfile.Name);
-
-            if (terminalProfile.IsDefault)
+            int maxAliasLength = configuration.TerminalProfiles.Max(profile => profile.Alias.Length);
+            foreach (TerminalProfile terminalProfile in configuration.TerminalProfiles.OrderBy(profile => profile.Alias))
             {
-                _ = messageBuilder.Append(" <-- specified default");
-            }
+                int padding = maxAliasLength - terminalProfile.Alias.Length + Padding;
+                _ = messageBuilder.Append(' ', LineIndentation)
+                    .Append(terminalProfile.Alias)
+                    .Append(' ', padding)
+                    .Append(terminalProfile.Name);
 
-            _ = messageBuilder.AppendLine();
+                if (terminalProfile.IsDefault)
+                {
+                    _ = messageBuilder.Append(" <-- specified default");
+                }
+
+                _ = messageBuilder.AppendLine();
+            } 
+        }
+        else
+        {
+            _ = messageBuilder.Append(' ', LineIndentation)
+                .Append("<no Windows Terminal profiles defined>")
+                .AppendLine();
         }
 
         return messageBuilder.AppendLine()
@@ -202,7 +211,7 @@ internal sealed class ShowHelpAction : CommandAction
         .AppendLine("Set a specified environment variable:")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
-        .AppendLine("lit (--var | --variable)")
+        .AppendLine("lit (--var | --variable) <environment-variable-name>")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
         .AppendLine("[(--val | --value) <value>]")
@@ -250,6 +259,6 @@ internal sealed class ShowHelpAction : CommandAction
         .AppendLine("(-m | --machine) | (-u | --user)")
         .Append(' ', LineIndentation)
         .Append(' ', LineIndentation)
-        .AppendLine("(--p | --print)")
+        .AppendLine("(-p | --print)")
         .AppendLine();
 }

@@ -142,7 +142,7 @@ public partial class App : Application
             CommandLineOptionId.Print, 
             CommandLineOptionKind.Flag, 
             string.Empty, 
-            ["Print the specified workingDirectoryPath"],
+            ["Print the specified value"],
             @"lit --config --print",
             IsOptional: false);
         table.Add("-p", printOption);
@@ -155,8 +155,8 @@ public partial class App : Application
             CommandLineOptionKind.Flag, 
             string.Empty, 
             ["Specify the scope of the",
-                "environment variable as 'user'"], 
-            @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --user --join", 
+                "environment variable as 'user'"],
+            @"lit --variable ""PATH"" --value ""C:\Folder"" --user --join", 
             IsOptional: false);
         table.Add("-u", userScopeOption);
         table.Add("--user", userScopeOption);
@@ -169,7 +169,7 @@ public partial class App : Application
             string.Empty, 
             ["Specify the scope of the",
                 "environment variable as 'system'"], 
-            @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join",
+            @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join",
             IsOptional: false);
         table.Add("-m", systemScopeOption);
         table.Add("--machine", systemScopeOption);
@@ -180,23 +180,23 @@ public partial class App : Application
             CommandLineOptionId.GetOrSetEnvironmentVariable,
             CommandLineOptionKind.ModeAndValue, 
             "GetOrSet-Environment-Variable", 
-            ["Set or create an environment variable"], 
-            @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join",
+            ["Set or create an environment variable"],
+            @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join",
             IsOptional: false);
         table.Add("--var", variableScopeOption);
         table.Add("--variable", variableScopeOption);
 
         var variableValueOption = new CommandLineOptionDescriptor(
-            "--workingDirectoryPath", 
+            "--value", 
             "--val", 
             CommandLineOptionId.EnvironmentVariableValue,
             CommandLineOptionKind.Value, 
             string.Empty, 
-            ["Specify the new workingDirectoryPath of", 
-                "the environment variable"], 
-            @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join",
+            ["Specify the new value of", 
+                "the environment variable"],
+            @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join",
             IsOptional: false);
-        table.Add("--workingDirectoryPath", variableValueOption);
+        table.Add("--value", variableValueOption);
         table.Add("--val", variableValueOption);
 
         var joinWriteModeOption = new CommandLineOptionDescriptor(
@@ -205,10 +205,10 @@ public partial class App : Application
             CommandLineOptionId.EnvironmentVariableWriteModeJoin, 
             CommandLineOptionKind.Flag, 
             string.Empty, 
-            ["Specify that the new workingDirectoryPath of", 
+            ["Specify that the new value of", 
                 "the environment variable is appended",
-                "to the existing workingDirectoryPath"], 
-            @"lit --variable ""PATH"" --workingDirectoryPath ""C:\Folder"" --machine --join",
+                "to the existing value"], 
+            @"lit --variable ""PATH"" --value ""C:\Folder"" --machine --join",
             IsOptional: false);
         table.Add("-j", joinWriteModeOption);
         table.Add("--join", joinWriteModeOption);
@@ -220,10 +220,10 @@ public partial class App : Application
             CommandLineOptionKind.Flag, 
             string.Empty, 
             [
-                "Specify that the new workingDirectoryPath of", 
+                "Specify that the new value of", 
                 "the environment variable replaces", 
-                "the existing workingDirectoryPath"], 
-            @"lit --variable ""TEMP"" --workingDirectoryPath ""C:\Folder"" --machine --replace", 
+                "the existing value"], 
+            @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace", 
             IsOptional: false);
         table.Add("-r", replaceWriteModeOption);
         table.Add("--replace", replaceWriteModeOption);
@@ -238,7 +238,7 @@ public partial class App : Application
                 $"Specifies the delimiter used to join", 
                 "the values of the environment variable.", 
                 "The default is the path separator ';'"], 
-            @"lit --variable ""TEMP"" --workingDirectoryPath ""C:\Folder"" --machine --replace --delimiter "";""", 
+            @"lit --variable ""TEMP"" --value ""C:\Folder"" --machine --replace --delimiter "";""", 
             IsOptional: true);
         table.Add("--del", delimiterOption);
         table.Add("--delimiter", delimiterOption);
