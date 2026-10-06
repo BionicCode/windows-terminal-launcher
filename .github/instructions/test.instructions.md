@@ -1,8 +1,9 @@
 ---
-Version: 1
+Version: 2
 Created: 2026-05-25T23:40:37+00:00
-Updated: 2026-05-26T19:08:33+00:00
+Updated: 2026-10-05T14:43:14+00:00
 Author: BionicCode
+applyTo: "test/**/*"
 ---
 <!-- doc-metadata-presentation:start -->
 <details>
@@ -17,26 +18,11 @@ Author: BionicCode
 <br>
 <!-- doc-metadata-presentation:end -->
 
-Follow the repository-wide engineering and validation standards defined in the root [AGENTS.md](../../test/AGENTS.md).
-Treat that AGENTS.md as the source of truth.
-The current file is based on that AGENTS.md the root folder "test" and may get outdated.
+# Testing Copilot bridge
 
----
-applyTo: "test/**/*"
----
+Read and follow the [root router](../../AGENTS.md) and [canonical domain instructions](../../.agent/instructions/TESTING.md) before the work they govern. Routes combine: .NET test work requires both DOTNET.md and TESTING.md; implementation, review, documentation, and guardrail triggers add their respective files. Task mode and user authorization still control command execution.
 
-Follow the test-folder rules for files under /test.
-
-Key rules:
-- Tests must be independent and order-independent.
-- Each test should verify one behavior and have one logical reason to fail.
-- Prefer one logical assertion per test; split tests when assertions verify different outcomes.
-- Use expressive names in the form:
-  Should_<ExpectedBehavior>_When_<StateUnderTest>
-- Prefer parameterized tests only for the same behavior across multiple inputs.
-- Do not hide scenarios behind excessive test helper indirection.
-- Keep Arrange, Act, Assert structure clear.
-- When this Copilot surface supports agent instructions, also follow /test/AGENTS.md.
+Preserve applicable local overlays. These globs are entry points; the root router selects domain rules explicitly even when work occurs outside the glob. Do not duplicate canonical rule bodies here.
 
 <!-- BEGIN REPOSITORY SPECIFICS -->
 <!-- Repository owners may edit only this section -->
